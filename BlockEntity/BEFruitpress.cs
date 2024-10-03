@@ -93,8 +93,8 @@ namespace Vintagestory.GameContent
 
         long listenerId;
         double juiceableLitresCapacity = 10;
-        double screwPercent; //What percent from the bottom of the animation are we.
-        double pressSqueezeRel; //An internal version of squeezeRel for comparison to make sure the crank is touching the mash before it activates.
+        double screwPercent;
+        double pressSqueezeRel;
         bool squeezeSoundPlayed;
 
         public ItemSlot MashSlot => inv[0];
@@ -182,7 +182,7 @@ namespace Vintagestory.GameContent
         private void onTick25msClient(float dt)
         {
             double squeezeRel = mashStack?.Attributes.GetDouble("squeezeRel", 1) ?? 1;
-            float selfHeight = (float)(juiceableLitresTransfered + juiceableLitresLeft) / 10f; //Added so the particles will better match the actual position of the mash.
+            float selfHeight = (float)(juiceableLitresTransfered + juiceableLitresLeft) / 10f;
 
             if (MashSlot.Empty || renderer.juiceTexPos == null || squeezeRel >= 1 || pressSqueezeRel > squeezeRel) return;
 
@@ -233,9 +233,9 @@ namespace Vintagestory.GameContent
             double totalHours = Api.World.Calendar.TotalHours;
 
             double squeezeRel = mashStack.Attributes.GetDouble("squeezeRel", 1);
-            double litresJuiceable = Math.Max(0, juiceableLitresLeft - ((juiceableLitresLeft + juiceableLitresTransfered) * screwPercent)); //Determines how much of the mash we can juice for how far down the screw is cranked.
+            double litresJuiceable = Math.Max(0, juiceableLitresLeft - ((juiceableLitresLeft + juiceableLitresTransfered) * screwPercent));
 
-            double litresToTransfer = Math.Min(litresJuiceable, (float)Math.Round((totalHours - lastLiquidTransferTotalHours) * 50f, 2)); //Rounding to two decimal points here removes the need for the rounding hack later.
+            double litresToTransfer = Math.Min(litresJuiceable, (float)Math.Round((totalHours - lastLiquidTransferTotalHours) * 50f, 2));
 
             if (Api.Side == EnumAppSide.Server && CompressAnimActive && squeezeRel < 1 && pressSqueezeRel <= squeezeRel && !squeezeSoundPlayed && juiceableLitresLeft > 0)
             {
@@ -315,7 +315,7 @@ namespace Vintagestory.GameContent
             if (Api.Side == EnumAppSide.Server) return true; // We let the client control this
 
             // Start
-            if (CanScrew && byPlayer.Entity.Controls.CtrlKey && firstEvent)
+            if (!CompressAnimActive && byPlayer.Entity.Controls.CtrlKey && firstEvent)
             {
                 compressAnimMeta.AnimationSpeed = 0.5f;
                 animUtil.StartAnimation(compressAnimMeta);
@@ -341,7 +341,7 @@ namespace Vintagestory.GameContent
             }
 
             // Continue
-            if (CanScrew && byPlayer.Entity.Controls.CtrlKey && compressAnimMeta.AnimationSpeed == 0)
+            if (compressAnimMeta.AnimationSpeed == 0 && byPlayer.Entity.Controls.CtrlKey)
             {
                 compressAnimMeta.AnimationSpeed = 0.5f;
                 (Api as ICoreClientAPI).Network.SendBlockEntityPacket(Pos, PacketIdScrewContinue);
@@ -369,11 +369,11 @@ namespace Vintagestory.GameContent
                 var hprops = getJuiceableProps(handStack);
                 if (hprops == null) return false;
 
-                if (hprops.LitresPerItem == null && !handStack.Attributes.HasAttribute("juiceableLitresLeft")) return false; //Prevents dry mash from being inserted.
+                if (hprops.LitresPerItem == null && !handStack.Attributes.HasAttribute("juiceableLitresLeft")) return false;
 
                 var pressedStack = hprops.PressedStack.ResolvedItemstack.Clone();
                 if (MashSlot.Empty) MashSlot.Itemstack = pressedStack;
-                else if (juiceableLitresLeft + juiceableLitresTransfered >= juiceableLitresCapacity) //Now properly displays if the container is full once you've maximum fruit.  Includes transfered liters so it's not possible to add more than a stack's worth of fruit slowly by juicing some and then adding more.
+                else if (juiceableLitresLeft + juiceableLitresTransfered >= juiceableLitresCapacity)
                 {
                     (Api as ICoreClientAPI)?.TriggerIngameError(this, "fullcontainer", Lang.Get("Container is full, press out juice and remove the mash before adding more"));
                     return false;
@@ -398,18 +398,18 @@ namespace Vintagestory.GameContent
                         return false;
                     }
 
-                    if (juiceableLitresLeft + juiceableLitresTransfered <= 0) mashStack.Attributes.SetDouble("squeezeRel", handStack.Attributes.GetDouble("squeezeRel", 1)); //Sets the mash in the press to be as squeezed as the one you're adding by hand.
+                    if (juiceableLitresLeft + juiceableLitresTransfered <= 0) mashStack.Attributes.SetDouble("squeezeRel", handStack.Attributes.GetDouble("squeezeRel", 1));
                 } else
                 {
-                    int desiredTransferAmount = Math.Min(handStack.StackSize, byPlayer.Entity.Controls.ShiftKey ? 1 : byPlayer.Entity.Controls.CtrlKey ? 32 : 4); //Fixed it so you can actually shift click just 1 in, but also added a ctrl click 32 option just to speed things along.
+                    int desiredTransferAmount = Math.Min(handStack.StackSize, byPlayer.Entity.Controls.ShiftKey ? 1 : byPlayer.Entity.Controls.CtrlKey ? 32 : 4);
 
-                    while (desiredTransferAmount * (float)hprops.LitresPerItem + juiceableLitresLeft + juiceableLitresTransfered > juiceableLitresCapacity) desiredTransferAmount -= 1; //Quick calculation of the total number of fruit you can add without going over the total capacity to make sure it's never adding more than a single fruit worth of juice at a time.
+                    while (desiredTransferAmount * (float)hprops.LitresPerItem + juiceableLitresLeft + juiceableLitresTransfered > juiceableLitresCapacity) desiredTransferAmount -= 1;
 
                     transferableLitres = desiredTransferAmount * (float)hprops.LitresPerItem;
                     removeItems = desiredTransferAmount;
                 }
 
-                if (removeItems > 0) { //Changed to only run this when it is going to remove items instead of just any time it thinks there's juice to add.
+                if (removeItems > 0) {
                     handslot.TakeOut(removeItems);
 
                     mashStack.Attributes.SetDouble("juiceableLitresLeft", juiceableLitresLeft += transferableLitres);
@@ -427,7 +427,7 @@ namespace Vintagestory.GameContent
             // Take out mash
             if (MashSlot.Empty) return false;
 
-            if (juiceableLitresLeft < 0.01 && mashStack.Collectible.Code.Path != "rot") // I moved this block of code to when the player removes the mash so you never end up in the situation where the player is trying to add more fruit while there is a stack of finished dry mash in the press. It also removes squeezeRel fixing the stacking bug.
+            if (juiceableLitresLeft < 0.01 && mashStack.Collectible.Code.Path != "rot")
             {
                 var juiceProps = getJuiceableProps(mashStack);
                 int stacksize = GameMath.RoundRandom(Api.World.Rand, (float)juiceableLitresTransfered);
@@ -525,12 +525,12 @@ namespace Vintagestory.GameContent
             float selfHeight = (float)(juiceableLitresTransfered + juiceableLitresLeft) / 10f;
 
             squeezeRel += Math.Max(0, 0.9f - selfHeight);
-            pressSqueezeRel = GameMath.Clamp(squeezeRel, 0.1f, 1f); //Store the value before performing the Min function so we can tell if the screw is touching the mash yet by comparing the two relative squeezes, in case the player releases and cranks back down.
+            pressSqueezeRel = GameMath.Clamp(squeezeRel, 0.1f, 1f);
             squeezeRel = GameMath.Clamp(Math.Min(mashStack.Attributes.GetDouble("squeezeRel", 1), squeezeRel), 0.1f, 1f);
 
             mashStack.Attributes.SetDouble("squeezeRel", squeezeRel);
 
-            screwPercent = GameMath.Clamp(1f - anim.CurrentFrame / (anim.Animation.QuantityFrames - 1), 0, 1f) / selfHeight; //A quick calculation of how much the mash is squeezed.  Dividing by selfHeight makes it so smaller mash responds more like expected while still always reaching 0% at the end.
+            screwPercent = GameMath.Clamp(1f - anim.CurrentFrame / (anim.Animation.QuantityFrames - 1), 0, 1f) / selfHeight;
         }
 
 
