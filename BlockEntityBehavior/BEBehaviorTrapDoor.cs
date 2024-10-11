@@ -19,6 +19,20 @@ namespace Vintagestory.GameContent
 
         public float RotRad => RotDeg * GameMath.DEG2RAD;
 
+        public BlockFacing facingWhenClosed { get { return BlockFacing.ALLFACES[AttachedFace]; } }
+        public BlockFacing facingWhenOpened 
+        {
+            get 
+            {
+                if (facingWhenClosed.IsVertical)
+                {
+                    return facingWhenClosed.FaceWhenRotatedBy(0, RotRad, 0);
+                }
+
+                return facingWhenClosed.GetHorizontalRotated(RotDeg);
+            }
+        }
+
         protected BlockBehaviorTrapDoor doorBh;
 
         public Cuboidf[] ColSelBoxes => opened ? boxesOpened : boxesClosed;
@@ -137,7 +151,13 @@ namespace Vintagestory.GameContent
             SetupRotationsAndColSelBoxes(true);
         }
 
-
+        public bool IsSideSolid(BlockFacing facing)
+        {   
+            if (!opened && facing == facingWhenClosed) return true;
+            else if (opened && facing == facingWhenOpened) return true;
+            
+            return false;
+        }
 
         public bool OnBlockInteractStart(IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel, ref EnumHandling handling)
         {
