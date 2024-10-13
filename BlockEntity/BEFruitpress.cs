@@ -427,15 +427,7 @@ namespace Vintagestory.GameContent
             // Take out mash
             if (MashSlot.Empty) return false;
 
-            if (juiceableLitresLeft < 0.01 && mashStack.Collectible.Code.Path != "rot")
-            {
-                var juiceProps = getJuiceableProps(mashStack);
-                int stacksize = GameMath.RoundRandom(Api.World.Rand, (float)juiceableLitresTransfered);
-                mashStack.Attributes.RemoveAttribute("juiceableLitresTransfered");
-                mashStack.Attributes.RemoveAttribute("juiceableLitresLeft");
-                mashStack.Attributes.RemoveAttribute("squeezeRel");
-                mashStack.StackSize = (int)(stacksize * juiceProps.PressedDryRatio);
-            }
+            convertDryMash();
 
             if (!byPlayer.InventoryManager.TryGiveItemstack(mashStack, true))
             {
@@ -497,7 +489,7 @@ namespace Vintagestory.GameContent
                 RunningAnimation anim = animUtil.animator.GetAnimationState("compress");
                 if (anim != null)
                 {
-                    udpateSqueezeRel(anim);
+                    updateSqueezeRel(anim);
                 }
             }
 
@@ -508,7 +500,7 @@ namespace Vintagestory.GameContent
         public void OnBlockInteractStop(float secondsUsed, IPlayer byPlayer)
         {
             RunningAnimation anim = animUtil.animator.GetAnimationState("compress");
-            udpateSqueezeRel(anim);
+            updateSqueezeRel(anim);
 
             if (!CompressAnimActive) return;
 
@@ -517,7 +509,7 @@ namespace Vintagestory.GameContent
         }
 
 
-        private void udpateSqueezeRel(RunningAnimation anim)
+        private void updateSqueezeRel(RunningAnimation anim)
         {
             if (anim == null || mashStack==null) return;
 
@@ -534,10 +526,24 @@ namespace Vintagestory.GameContent
         }
 
 
+        private void convertDryMash()
+        {
+            if (juiceableLitresLeft < 0.01 && mashStack.Collectible.Code.Path != "rot")
+            {
+                var juiceProps = getJuiceableProps(mashStack);
+                int stacksize = GameMath.RoundRandom(Api.World.Rand, (float)juiceableLitresTransfered);
+                mashStack.Attributes.RemoveAttribute("juiceableLitresTransfered");
+                mashStack.Attributes.RemoveAttribute("juiceableLitresLeft");
+                mashStack.Attributes.RemoveAttribute("squeezeRel");
+                mashStack.StackSize = (int)(stacksize * juiceProps.PressedDryRatio);
+            }
+        }
+
+
         public bool OnBlockInteractCancel(float secondsUsed, IPlayer byPlayer)
         {
             RunningAnimation anim = animUtil.animator.GetAnimationState("compress");
-            udpateSqueezeRel(anim);
+            updateSqueezeRel(anim);
 
             if (CompressAnimActive)
             {
@@ -615,6 +621,11 @@ namespace Vintagestory.GameContent
 
         public override void OnBlockBroken(IPlayer byPlayer = null)
         {
+            if (!MashSlot.Empty)
+            {
+                convertDryMash();
+            }
+
             base.OnBlockBroken();
         }
 
