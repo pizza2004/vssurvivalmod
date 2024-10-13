@@ -615,6 +615,16 @@ namespace Vintagestory.GameContent
 
         public override void OnBlockBroken(IPlayer byPlayer = null)
         {
+            if (juiceableLitresLeft < 0.01 && mashStack.Collectible.Code.Path != "rot")
+            {
+                var juiceProps = getJuiceableProps(mashStack);
+                int stacksize = GameMath.RoundRandom(Api.World.Rand, (float)juiceableLitresTransfered);
+                mashStack.Attributes.RemoveAttribute("juiceableLitresTransfered");
+                mashStack.Attributes.RemoveAttribute("juiceableLitresLeft");
+                mashStack.Attributes.RemoveAttribute("squeezeRel");
+                mashStack.StackSize = (int)(stacksize * juiceProps.PressedDryRatio);
+            }
+
             base.OnBlockBroken();
         }
 
