@@ -19,16 +19,16 @@ namespace Vintagestory.GameContent
         {
             if (props.Type == EnumTransitionType.Perish)
             {
-                var juiceProps = getJuiceableProps(slot.ItemStack);
-                float juiceableLitresLeft = slot.ItemStack.Attributes.TryGetFloat("juiceableLitresLeft");
-                
-                if (juiceableLitresLeft != null)
+                float pressedDryRatio = slot.Itemstack.ItemAttributes["juiceableProperties"]["pressedDryRatio"].AsFloat(1);
+                double juiceableLitresTotal = slot.Itemstack.Attributes.GetDouble("juiceableLitresLeft") + slot.Itemstack.Attributes.GetDouble("juiceableLitresTransfered");
+
+                if (juiceableLitresTotal > 0)
                 {
-                    int stacksize = GameMath.RoundRandom(Api.World.Rand, juiceableLitresLeft);
-                    slot.ItemStack.Attributes.RemoveAttribute("juiceableLitresTransfered");
-                    slot.ItemStack.Attributes.RemoveAttribute("juiceableLitresLeft");
-                    slot.ItemStack.Attributes.RemoveAttribute("squeezeRel");
-                    props.TransitionRatio = (int)(stacksize * juiceProps.PressedDryRatio);
+                    int stacksize = GameMath.RoundRandom(api.World.Rand, (float)juiceableLitresTotal);
+                    slot.Itemstack.Attributes.RemoveAttribute("juiceableLitresTransfered");
+                    slot.Itemstack.Attributes.RemoveAttribute("juiceableLitresLeft");
+                    slot.Itemstack.Attributes.RemoveAttribute("squeezeRel");
+                    props.TransitionRatio = (int)(stacksize * pressedDryRatio);
                 }
             }
 
