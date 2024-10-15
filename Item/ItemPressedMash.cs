@@ -28,7 +28,7 @@ namespace Vintagestory.GameContent
                     slot.Itemstack.Attributes.RemoveAttribute("juiceableLitresTransfered");
                     slot.Itemstack.Attributes.RemoveAttribute("juiceableLitresLeft");
                     slot.Itemstack.Attributes.RemoveAttribute("squeezeRel");
-                    props.TransitionRatio = (int)(stacksize * pressedDryRatio);
+                    props.TransitionRatio *= (int)(stacksize * pressedDryRatio);
                 }
             }
 
