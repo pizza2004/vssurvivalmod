@@ -499,8 +499,7 @@ namespace Vintagestory.GameContent
 
         public void OnBlockInteractStop(float secondsUsed, IPlayer byPlayer)
         {
-            RunningAnimation anim = animUtil.animator.GetAnimationState("compress");
-            updateSqueezeRel(anim);
+            updateSqueezeRel(animUtil.animator.GetAnimationState("compress"));
 
             if (!CompressAnimActive) return;
 
@@ -542,8 +541,7 @@ namespace Vintagestory.GameContent
 
         public bool OnBlockInteractCancel(float secondsUsed, IPlayer byPlayer)
         {
-            RunningAnimation anim = animUtil.animator.GetAnimationState("compress");
-            updateSqueezeRel(anim);
+            updateSqueezeRel(animUtil.animator.GetAnimationState("compress"));
 
             if (CompressAnimActive)
             {
