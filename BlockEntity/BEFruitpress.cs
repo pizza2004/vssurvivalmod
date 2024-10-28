@@ -484,14 +484,7 @@ namespace Vintagestory.GameContent
         {
             if (section != EnumFruitPressSection.Screw) return false;
 
-            if (mashStack != null)
-            {
-                RunningAnimation anim = animUtil.animator.GetAnimationState("compress");
-                if (anim != null)
-                {
-                    updateSqueezeRel(anim);
-                }
-            }
+            if (mashStack != null) updateSqueezeRel(animUtil.animator.GetAnimationState("compress"));
 
             return CompressAnimActive;
         }
