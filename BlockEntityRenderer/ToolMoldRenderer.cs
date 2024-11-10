@@ -11,20 +11,11 @@ namespace Vintagestory.GameContent
     {
         BlockPos pos;
         ICoreClientAPI api;
-
-
         MeshRef[] quadModelRefs;
         public Matrixf ModelMat = new Matrixf();
 
-        public double RenderOrder
-        {
-            get { return 0.5; }
-        }
-
-        public int RenderRange
-        {
-            get { return 24; }
-        }
+        public double RenderOrder => 0.5;
+        public int RenderRange => 24;   
 
         /// <summary>
         /// 0..1
@@ -38,6 +29,8 @@ namespace Vintagestory.GameContent
         public AssetLocation TextureName = null;
 
         internal Cuboidf[] fillQuadsByLevel;
+
+        public ItemStack stack;
 
         public ToolMoldRenderer(BlockPos pos, ICoreClientAPI api, Cuboidf[] fillQuadsByLevel = null)
         {
@@ -77,7 +70,6 @@ namespace Vintagestory.GameContent
 
             IRenderAPI rpi = api.Render;
             IClientWorldAccessor worldAccess = api.World;
-            EntityPos plrPos = worldAccess.Player.Entity.Pos;
             Vec3d camPos = worldAccess.Player.Entity.CameraPos;
 
             rpi.GlDisableCullFace();
@@ -92,6 +84,12 @@ namespace Vintagestory.GameContent
             prog.AddRenderFlags = 0;
             prog.ExtraGodray = 0;
             prog.NormalShaded = 0;
+            if (stack != null)
+            {
+                prog.AverageColor = ColorUtil.ToRGBAVec4f(api.BlockTextureAtlas.GetAverageColor((stack.Item?.FirstTexture ?? stack.Block.FirstTextureInventory).Baked.TextureSubId));
+                prog.TempGlowMode = 1;
+            }
+            
 
             Vec4f lightrgbs = api.World.BlockAccessor.GetLightRGBs(pos.X, pos.Y, pos.Z);
             float[] glowColor = ColorUtil.GetIncandescenceColorAsColor4f((int)Temperature);
@@ -135,9 +133,7 @@ namespace Vintagestory.GameContent
             for (int i = 0; i < quadModelRefs.Length; i++)
             {
                 quadModelRefs[i]?.Dispose();
-            }
-
-            
+            }            
         }
     }
 }

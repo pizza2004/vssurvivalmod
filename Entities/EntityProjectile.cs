@@ -10,15 +10,14 @@ namespace Vintagestory.GameContent
 {
     public class EntityProjectile : Entity
     {
-        bool beforeCollided;
-        bool stuck;
-
-        long msLaunch;
-        long msCollide;
-
-        Vec3d motionBeforeCollide = new Vec3d();
-
-        CollisionTester collTester = new CollisionTester();
+        protected bool beforeCollided;
+        protected bool stuck;
+        protected long msLaunch;
+        protected long msCollide;
+        protected Vec3d motionBeforeCollide = new Vec3d();
+        protected CollisionTester collTester = new CollisionTester();
+        protected Cuboidf collisionTestBox;
+        protected EntityPartitioning ep;
 
         public Entity FiredBy;
         public float Weight = 0.1f;
@@ -27,12 +26,13 @@ namespace Vintagestory.GameContent
         public float DropOnImpactChance = 0f;
         public bool DamageStackOnImpact = false;
 
-        Cuboidf collisionTestBox;
+        public bool EntityHit { get; protected set; }
 
-        EntityPartitioning ep;
-
-        
-
+        public bool NonCollectible
+        {
+            get { return Attributes.GetBool("nonCollectible"); }
+            set { Attributes.SetBool("nonCollectible", value); }
+        }
 
         public override bool ApplyGravity
         {
@@ -47,29 +47,35 @@ namespace Vintagestory.GameContent
         public override void Initialize(EntityProperties properties, ICoreAPI api, long InChunkIndex3d)
         {
             base.Initialize(properties, api, InChunkIndex3d);
+            if (Api.Side == EnumAppSide.Server)
+            {
+                if (FiredBy != null)
+                {
+                    WatchedAttributes.SetLong("firedBy", FiredBy.EntityId);
+                }
+            }
 
+            if (Api.Side == EnumAppSide.Client)
+            {
+                FiredBy = Api.World.GetEntityById(WatchedAttributes.GetLong("firedBy"));
+            }
             msLaunch = World.ElapsedMilliseconds;
 
             collisionTestBox = SelectionBox.Clone().OmniGrowBy(0.05f);
 
-            //if (api.Side == EnumAppSide.Server) - why only server side? This makes arrows fly through entities on the client
-            {
-                GetBehavior<EntityBehaviorPassivePhysics>().OnPhysicsTickCallback = onPhysicsTickCallback;
-                ep = api.ModLoader.GetModSystem<EntityPartitioning>();
-            }
+            GetBehavior<EntityBehaviorPassivePhysics>().OnPhysicsTickCallback = onPhysicsTickCallback;
+            ep = api.ModLoader.GetModSystem<EntityPartitioning>();
 
-            GetBehavior<EntityBehaviorPassivePhysics>().collisionYExtra = 0f; // Slightly cheap hax so that stones/arrows don't collid with fences
+            GetBehavior<EntityBehaviorPassivePhysics>().CollisionYExtra = 0f; // Slightly cheap hax so that stones/arrows don't collid with fences
         }
 
         private void onPhysicsTickCallback(float dtFac)
-        {   
+        {
             if (ShouldDespawn || !Alive) return;
             if (World.ElapsedMilliseconds <= msCollide + 500) return;
 
             var pos = SidedPos;
-
-            if (pos.Motion.X == 0 && pos.Motion.Y == 0 && pos.Motion.Z == 0) return;  // don't do damage if stuck in ground
-
+            if (pos.Motion.LengthSq() < 0.2*0.2) return;  // Don't do damage if stuck in ground
 
             Cuboidd projectileBox = SelectionBox.ToDouble().Translate(pos.X, pos.Y, pos.Z);
 
@@ -79,7 +85,7 @@ namespace Vintagestory.GameContent
             else projectileBox.Y2 += pos.Motion.Y * dtFac;
             if (pos.Motion.Z < 0) projectileBox.Z1 += pos.Motion.Z * dtFac;
             else projectileBox.Z2 += pos.Motion.Z * dtFac;
-            
+
             ep.WalkEntities(pos.XYZ, 5f, (e) => {
                 if (e.EntityId == this.EntityId || (FiredBy != null && e.EntityId == FiredBy.EntityId && World.ElapsedMilliseconds - msLaunch < 500) || !e.IsInteractable) return true;
 
@@ -137,7 +143,7 @@ namespace Vintagestory.GameContent
         }
 
 
-        private void IsColliding(EntityPos pos, double impactSpeed)
+        protected virtual void IsColliding(EntityPos pos, double impactSpeed)
         {
             pos.Motion.Set(0, 0, 0);
 
@@ -168,11 +174,11 @@ namespace Vintagestory.GameContent
                 beforeCollided = true;
             }
 
-            
+
         }
 
 
-        bool TryAttackEntity(double impactSpeed)
+        protected virtual bool TryAttackEntity(double impactSpeed)
         {
             if (World is IClientWorldAccessor || World.ElapsedMilliseconds <= msCollide + 250) return false;
             if (impactSpeed <= 0.01) return false;
@@ -181,7 +187,7 @@ namespace Vintagestory.GameContent
 
             Cuboidd projectileBox = SelectionBox.ToDouble().Translate(ServerPos.X, ServerPos.Y, ServerPos.Z);
 
-            // We give it a bit of extra leeway of 50% because physics ticks can run twice or 3 times in one game tick 
+            // We give it a bit of extra leeway of 50% because physics ticks can run twice or 3 times in one game tick
             if (ServerPos.Motion.X < 0) projectileBox.X1 += 1.5 * ServerPos.Motion.X;
             else projectileBox.X2 += 1.5 * ServerPos.Motion.X;
             if (ServerPos.Motion.Y < 0) projectileBox.Y1 += 1.5 * ServerPos.Motion.Y;
@@ -207,15 +213,17 @@ namespace Vintagestory.GameContent
                 impactOnEntity(entity);
                 return true;
             }
-            
+
 
             return false;
         }
 
 
-        private void impactOnEntity(Entity entity)
+        protected virtual void impactOnEntity(Entity entity)
         {
             if (!Alive) return;
+
+            EntityHit = true;
 
             EntityPos pos = SidedPos;
 
@@ -238,8 +246,6 @@ namespace Vintagestory.GameContent
 
             msCollide = World.ElapsedMilliseconds;
 
-            pos.Motion.Set(0, 0, 0);
-
             if (canDamage && World.Side == EnumAppSide.Server)
             {
                 World.PlaySoundAt(new AssetLocation("sounds/arrow-impact"), this, null, false, 24);
@@ -250,8 +256,8 @@ namespace Vintagestory.GameContent
                 bool didDamage = entity.ReceiveDamage(new DamageSource()
                 {
                     Source = fromPlayer != null ? EnumDamageSource.Player : EnumDamageSource.Entity,
-                    SourceEntity = this, 
-                    CauseEntity = FiredBy, 
+                    SourceEntity = this,
+                    CauseEntity = FiredBy,
                     Type = EnumDamageType.PiercingAttack
                 }, dmg);
 
@@ -267,7 +273,7 @@ namespace Vintagestory.GameContent
 
                 if (World.Rand.NextDouble() < DropOnImpactChance && leftDurability > 0)
                 {
-                    
+
                 }
                 else
                 {
@@ -279,8 +285,21 @@ namespace Vintagestory.GameContent
                     World.PlaySoundFor(new AssetLocation("sounds/player/projectilehit"), (FiredBy as EntityPlayer).Player, false, 24);
                 }
             }
+
+            pos.Motion.Set(0, 0, 0);
         }
 
+        public virtual void SetInitialRotation()
+        {
+            var pos = ServerPos;
+            double speed = pos.Motion.Length();
+            if (speed > 0.01)
+            {
+                pos.Pitch = 0;
+                pos.Yaw = GameMath.PI + (float)Math.Atan2(pos.Motion.X / speed, pos.Motion.Z / speed);
+                pos.Roll = -(float)Math.Asin(GameMath.Clamp(-pos.Motion.Y / speed, -1, 1));
+            }
+        }
 
         public virtual void SetRotation()
         {
@@ -291,7 +310,7 @@ namespace Vintagestory.GameContent
             if (speed > 0.01)
             {
                 pos.Pitch = 0;
-                pos.Yaw = 
+                pos.Yaw =
                     GameMath.PI + (float)Math.Atan2(pos.Motion.X / speed, pos.Motion.Z / speed)
                     + GameMath.Cos((World.ElapsedMilliseconds - msLaunch) / 200f) * 0.03f
                 ;
@@ -305,7 +324,7 @@ namespace Vintagestory.GameContent
 
         public override bool CanCollect(Entity byEntity)
         {
-            return Alive && World.ElapsedMilliseconds - msLaunch > 1000 && ServerPos.Motion.Length() < 0.01;
+            return !NonCollectible && Alive && World.ElapsedMilliseconds - msLaunch > 1000 && ServerPos.Motion.Length() < 0.01;
         }
 
         public override ItemStack OnCollected(Entity byEntity)

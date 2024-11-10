@@ -62,7 +62,7 @@ namespace Vintagestory.GameContent
             IWorldAccessor world = entityItem.World;
             EntityPos pos = entityItem.ServerPos;
             BlockPos bpos = pos.AsBlockPos.Add(offX, offY - 1, offZ);
-            if (!world.BlockAccessor.GetMostSolidBlock(bpos.X, bpos.Y, bpos.Z).CanAttachBlockAt(world.BlockAccessor, this, bpos, BlockFacing.UP)) return false;
+            if (!world.BlockAccessor.GetMostSolidBlock(bpos).CanAttachBlockAt(world.BlockAccessor, this, bpos, BlockFacing.UP)) return false;
 
             string useless = "";
 
@@ -73,7 +73,7 @@ namespace Vintagestory.GameContent
                 HitPosition = new Vec3d(0.5, 1, 0.5)
             }, ref useless);
 
-            if (ok) entityItem.World.PlaySoundAt(entityItem.Itemstack.Block.Sounds?.Place, pos.X, pos.Y, pos.Z, null);
+            if (ok) entityItem.World.PlaySoundAt(entityItem.Itemstack.Block.Sounds?.Place, bpos, -0.5, null);
             
             return ok;
         }

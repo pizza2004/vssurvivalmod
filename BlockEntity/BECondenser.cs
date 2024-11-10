@@ -97,8 +97,14 @@ namespace Vintagestory.GameContent
 
                     if (!byPlayer.InventoryManager.TryGiveItemstack(inventory[1].Itemstack, true))
                     {
-                        Api.World.SpawnItemEntity(inventory[1].Itemstack, Pos.ToVec3d().Add(0.5, 0.5, 0.5));
+                        Api.World.SpawnItemEntity(inventory[1].Itemstack, Pos);
                     }
+
+                    Api.World.Logger.Audit("{0} Took 1x{1} from Condenser at {2}.",
+                        byPlayer.PlayerName,
+                        inventory[1].Itemstack?.Collectible.Code,
+                        blockSel.Position
+                    );
                     inventory[1].Itemstack = null;
                     MarkDirty(true);
                     bucketMesh?.Clear();

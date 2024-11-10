@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Linq;
-using System.ServiceModel.Channels;
 using System.Text;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
@@ -311,7 +309,7 @@ namespace Vintagestory.GameContent
             {
                 string message;
                 string outputName = recipe.GetOutputName(world, stacks);
-                if (recipe.DirtyPot)
+                if (recipe.CooksInto != null)
                 {
                     message = "contained-nonfood-portions";
                     int index = outputName.IndexOf('\n');

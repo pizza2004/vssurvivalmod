@@ -16,7 +16,7 @@ namespace Vintagestory.ServerMods
         public double verRadiusSq;
     }
 
-    
+
     public class GenHotSprings : ModStdWorldGen
     {
         Block[] decorBlocks;
@@ -49,7 +49,7 @@ namespace Vintagestory.ServerMods
         public void initWorldGen()
         {
             LoadGlobalConfig(api);
-            
+
             decorBlocks = new Block[] {
                 api.World.GetBlock(new AssetLocation("hotspringbacteria-87deg")),
                 api.World.GetBlock(new AssetLocation("hotspringbacteriasmooth-74deg")),
@@ -67,6 +67,8 @@ namespace Vintagestory.ServerMods
         {
             var data = request.Chunks[0].MapChunk.GetModdata<Dictionary<Vec3i, HotSpringGenData>>("hotspringlocations");
             if (data == null) return;
+
+            if (GetIntersectingStructure(request.ChunkX * chunksize + chunksize / 2, request.ChunkZ * chunksize + chunksize / 2, SkipHotSpringsgHashCode) != null) return;
 
             int baseX = request.ChunkX * chunksize;
             int baseZ = request.ChunkZ * chunksize;
@@ -212,8 +214,8 @@ namespace Vintagestory.ServerMods
             {
                 prepareHotSpringBase(posx, posy, posz, surfaceY, true, decorBlock);
 
-                var upblock = wgenBlockAccessor.GetBlock(pos.X, pos.Y + 1, pos.Z);
-                var upblock2 = wgenBlockAccessor.GetBlock(pos.X, pos.Y + 2, pos.Z);
+                var upblock = wgenBlockAccessor.GetBlockAbove(pos);
+                var upblock2 = wgenBlockAccessor.GetBlockAbove(pos, 2);
                 if (upblock2.SideSolid[BlockFacing.UP.Index]) pos.Y += 2;
                 else if (upblock.SideSolid[BlockFacing.UP.Index]) pos.Y++;
 
@@ -251,7 +253,7 @@ namespace Vintagestory.ServerMods
                     {
                         wgenBlockAccessor.SetDecor(api.World.Blocks[0], npos.DownCopy(), BlockFacing.UP);
                         wgenBlockAccessor.SetBlock(blocksludgygravel.Id, npos, BlockLayersAccess.SolidBlocks);
-                        
+
                         if (sideDecorBlock != null)
                         {
                             wgenBlockAccessor.SetDecor(sideDecorBlock, npos, BlockFacing.UP);

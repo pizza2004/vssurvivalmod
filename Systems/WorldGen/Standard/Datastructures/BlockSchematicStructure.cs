@@ -21,9 +21,10 @@ namespace Vintagestory.ServerMods
         int mapheight;
 
         PlaceBlockDelegate handler = null;
-        GenBlockLayers genBlockLayers;
+        internal GenBlockLayers genBlockLayers;
 
         public int OffsetY { get; set; } = -1;
+        public int MaxYDiff = 3;
 
         public override void Init(IBlockAccessor blockAccessor)
         {
@@ -53,16 +54,16 @@ namespace Vintagestory.ServerMods
                 uint index = Indices[i];
                 int storedBlockid = BlockIds[i];
 
-                int dx = (int)(index & 0x1ff);
-                int dy = (int)((index >> 20) & 0x1ff);
-                int dz = (int)((index >> 10) & 0x1ff);
+                int dx = (int)(index & PosBitMask);
+                int dy = (int)((index >> 20) & PosBitMask);
+                int dz = (int)((index >> 10) & PosBitMask);
 
                 Block block = blockAccessor.GetBlock(BlockCodes[storedBlockid]);
                 if (block == null) continue;
 
                 if (block.ForFluidsLayer)
                 {
-                    FluidBlocksByPos.Add(new BlockPos(dx,dy,dz), block);   
+                    FluidBlocksByPos.Add(new BlockPos(dx,dy,dz), block);
                 }
                 else
                 {
@@ -167,7 +168,7 @@ namespace Vintagestory.ServerMods
                         if (block == null) continue;
 
 
-                        if (replaceMetaBlocks && block == undergroundBlock) continue;
+                        if (replaceMetaBlocks && (block.Id == UndergroundBlockId || block.Id == AbovegroundBlockId)) continue;
 
                         if (block.Replaceable < 1000 && depth >= 0)
                         {
@@ -199,7 +200,7 @@ namespace Vintagestory.ServerMods
                                 }
 
                                 int climate = GameMath.BiLerpRgbColor(
-                                    (float)GameMath.Clamp((curPos.X - chunkBaseX) / (float)chunksize, 0, 1), 
+                                    (float)GameMath.Clamp((curPos.X - chunkBaseX) / (float)chunksize, 0, 1),
                                     (float)GameMath.Clamp((curPos.Z - chunkBaseZ) / (float)chunksize, 0, 1),
                                     climateUpLeft, climateUpRight, climateBotLeft, climateBotRight
                                 );
@@ -268,7 +269,7 @@ namespace Vintagestory.ServerMods
 
                             if (!block.RainPermeable)
                             {
-                                if (block == fillerBlock || block == pathwayBlock)
+                                if (IsFillerOrPath(block))
                                 {
                                     int lx = curPos.X % chunksize;
                                     int lz = curPos.Z % chunksize;
@@ -303,7 +304,7 @@ namespace Vintagestory.ServerMods
             }
 
             PlaceDecors(blockAccessor, startPos);
-            PlaceEntitiesAndBlockEntities(blockAccessor, worldForCollectibleResolve, startPos, BlockCodesTmpForRemap, ItemCodes, replaceBlockEntities, replaceBlocks, centerrockblockid, layerBlockForBlockEntities);
+            PlaceEntitiesAndBlockEntities(blockAccessor, worldForCollectibleResolve, startPos, BlockCodesTmpForRemap, ItemCodes, replaceBlockEntities, replaceBlocks, centerrockblockid, layerBlockForBlockEntities, replaceMetaBlocks);
 
             return placed;
         }
@@ -384,15 +385,15 @@ namespace Vintagestory.ServerMods
                 uint index = Indices[i];
                 int storedBlockid = BlockIds[i];
 
-                int dx = (int)(index & 0x1ff);
-                int dy = (int)((index >> 20) & 0x1ff);
-                int dz = (int)((index >> 10) & 0x1ff);
+                int dx = (int)(index & PosBitMask);
+                int dy = (int)((index >> 20) & PosBitMask);
+                int dz = (int)((index >> 10) & PosBitMask);
 
                 AssetLocation blockCode = BlockCodes[storedBlockid];
 
                 Block newBlock = blockAccessor.GetBlock(blockCode);
 
-                if (newBlock == null || (replaceMetaBlocks && newBlock == undergroundBlock)) continue;
+                if (newBlock == null || (replaceMetaBlocks && (newBlock.Id == UndergroundBlockId || newBlock.Id == AbovegroundBlockId))) continue;
 
                 curPos.Set(dx + startPos.X, dy + startPos.Y, dz + startPos.Z);
                 if (!blockAccessor.IsValidPos(curPos)) continue;    // Deal with cases where we are at the map edge
@@ -426,7 +427,7 @@ namespace Vintagestory.ServerMods
             if (!(blockAccessor is IBlockAccessorRevertable))
             {
                 PlaceDecors(blockAccessor, startPos);
-                PlaceEntitiesAndBlockEntities(blockAccessor, worldForCollectibleResolve, startPos, BlockCodesTmpForRemap, ItemCodes, false, null, centerrockblockid);
+                PlaceEntitiesAndBlockEntities(blockAccessor, worldForCollectibleResolve, startPos, BlockCodesTmpForRemap, ItemCodes, false, null, centerrockblockid, null, GenStructures.ReplaceMetaBlocks);
             }
 
             return placed;
@@ -436,16 +437,16 @@ namespace Vintagestory.ServerMods
 
 
 
-        private Block GetBlockLayerBlock(int unscaledRain, int unscaledTemp, int posY, int rockBlockId, int forDepth, Block defaultBlock, IList<Block> blocks, BlockPos pos, int underWaterDepth)
+        internal Block GetBlockLayerBlock(int unscaledRain, int unscaledTemp, int posY, int rockBlockId, int forDepth, Block defaultBlock, IList<Block> blocks, BlockPos pos, int underWaterDepth)
         {
             if (blockLayerConfig == null) return defaultBlock;
 
             posY -= forDepth;
             float distx = (float)genBlockLayers.distort2dx.Noise(pos.X, pos.Z);
-            float temperature = TerraGenConfig.GetScaledAdjustedTemperatureFloat(unscaledTemp, posY - TerraGenConfig.seaLevel + (int)(distx / 5));
-            float rainRel = TerraGenConfig.GetRainFall(unscaledRain, posY) / 255f;
+            float temperature = Climate.GetScaledAdjustedTemperatureFloat(unscaledTemp, posY - TerraGenConfig.seaLevel + (int)(distx / 5));
+            float rainRel = Climate.GetRainFall(unscaledRain, posY) / 255f;
             float heightRel = ((float)posY - TerraGenConfig.seaLevel) / ((float)mapheight - TerraGenConfig.seaLevel);
-            float fertilityRel = TerraGenConfig.GetFertilityFromUnscaledTemp((int)(rainRel * 255), unscaledTemp, heightRel) / 255f;
+            float fertilityRel = Climate.GetFertilityFromUnscaledTemp((int)(rainRel * 255), unscaledTemp, heightRel) / 255f;
 
             double posRand = (double)GameMath.MurmurHash3(pos.X, 1, pos.Z) / int.MaxValue;
             posRand = (posRand + 1) * blockLayerConfig.blockLayerTransitionSize;
@@ -475,7 +476,7 @@ namespace Vintagestory.ServerMods
 
                     return blocks[lbbc.GetBlockForMotherRock(rockBlockId)];
                 }
-                
+
             }
 
             return defaultBlock;
@@ -488,18 +489,25 @@ namespace Vintagestory.ServerMods
             cloned.SizeY = SizeY;
             cloned.SizeZ = SizeZ;
             cloned.OffsetY = OffsetY;
+            cloned.MaxYDiff = MaxYDiff;
+
             cloned.GameVersion = GameVersion;
+            cloned.FromFileName = FromFileName;
+
             cloned.BlockCodes = new Dictionary<int, AssetLocation>(BlockCodes);
             cloned.ItemCodes = new Dictionary<int, AssetLocation>(ItemCodes);
             cloned.Indices = new List<uint>(Indices);
             cloned.BlockIds = new List<int>(BlockIds);
+
             cloned.BlockEntities = new Dictionary<uint, string>(BlockEntities);
             cloned.Entities = new List<string>(Entities);
-            cloned.ReplaceMode = ReplaceMode;
-            cloned.FromFileName = FromFileName;
-            cloned.EntranceRotation = EntranceRotation;
+
             cloned.DecorIndices = new List<uint>(DecorIndices);
-            cloned.DecorIds = new List<int>(DecorIds);
+            cloned.DecorIds = new List<long>(DecorIds);
+
+            cloned.ReplaceMode = ReplaceMode;
+            cloned.EntranceRotation = EntranceRotation;
+            cloned.OriginalPos = OriginalPos;
 
             return cloned;
         }

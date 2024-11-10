@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ProperVersion;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Vintagestory.API.Client;
@@ -17,6 +18,8 @@ namespace Vintagestory.GameContent
         public DialogueComponent[] components;
     }
 
+    public delegate bool CanConverseDelegate(out string errorMessage);
+
     public class EntityBehaviorConversable : EntityBehavior
     {
         public static int BeginConvoPacketId = 1213;
@@ -33,9 +36,9 @@ namespace Vintagestory.GameContent
         DialogueConfig dialogue;
         AssetLocation dialogueLoc;
 
-
-        public Action<DialogueController> onControllerCreated;
-
+        
+        public Action<DialogueController> OnControllerCreated;
+        public event CanConverseDelegate CanConverse;
 
         public DialogueController GetOrCreateController(EntityPlayer player)
         {
@@ -57,7 +60,7 @@ namespace Vintagestory.GameContent
 
                 controller = ControllerByPlayer[player.PlayerUID] = new DialogueController(world.Api, player, entity as EntityAgent, dialogue);
                 controller.DialogTriggers += Controller_DialogTriggers;
-                onControllerCreated?.Invoke(controller);
+                OnControllerCreated?.Invoke(controller);
 
                 foreach (var cmp in dialogue.components)
                 {
@@ -74,7 +77,6 @@ namespace Vintagestory.GameContent
             if (value == "playanimation")
             {
                 entity.AnimManager.StartAnimation(data.AsObject<AnimationMetaData>());
-                return -1;
             }
 
             if (value == "giveitemstack")
@@ -89,9 +91,29 @@ namespace Vintagestory.GameContent
                         entity.World.SpawnItemEntity(itemstack, triggeringEntity.Pos.XYZ);
                     }
                 }
-
-                return -1;
             }
+
+
+            if (value == "spawnentity")
+            {
+                if (entity.World.Side == EnumAppSide.Server)
+                {
+                    var cfg = data.AsObject<DlgSpawnEntityConfig>();
+
+                    float weightsum = 0;
+                    for (int i =0; i < cfg.Codes.Length; i++) weightsum += cfg.Codes[i].Weight;
+                    var rnd = entity.World.Rand.NextDouble() * weightsum;
+
+                    for (int i = 0; i < cfg.Codes.Length; i++) { 
+                        if ((rnd -= cfg.Codes[i].Weight) <= 0)
+                        {
+                            TrySpawnEntity((triggeringEntity as EntityPlayer)?.Player, cfg.Codes[i].Code, cfg.Range, cfg);
+                            break;
+                        }
+                    }
+                }
+            }
+
 
             if (value == "takefrominventory")
             {
@@ -107,8 +129,22 @@ namespace Vintagestory.GameContent
                         slot.MarkDirty();
                     }
                 }
+            }
 
-                return -1;
+            if (value == "repairheld")
+            {
+                if (entity.World.Side == EnumAppSide.Server)
+                {
+                    var slot = triggeringEntity.RightHandItemSlot;
+                    if (!slot.Empty)
+                    {
+                        var d = slot.Itemstack.Collectible.GetDurability(slot.Itemstack);
+                        var max = slot.Itemstack.Collectible.GetMaxDurability(slot.Itemstack);
+                        if (d < max) {
+                            slot.Itemstack.Collectible.SetDurability(slot.Itemstack, max);
+                        }
+                    }
+                }
             }
 
             if (value == "attack")
@@ -126,6 +162,86 @@ namespace Vintagestory.GameContent
             return -1;
         }
 
+        private void TrySpawnEntity(IPlayer forplayer, string entityCode, float range, DlgSpawnEntityConfig cfg)
+        {
+            var etype = entity.World.GetEntityType(AssetLocation.Create(entityCode, entity.Code.Domain));
+            if (etype == null)
+            {
+                entity.World.Logger.Warning("Dialogue system, unable to spawn {0}, no such entity exists", entityCode);
+                return;
+            }
+
+            var centerpos = entity.ServerPos;
+            var minpos = centerpos.Copy().Add(-range, 0, -range).AsBlockPos;
+            var maxpos = centerpos.Copy().Add(range, 0, range).AsBlockPos;
+            
+
+            var spawnpos = findSpawnPos(forplayer, etype, minpos, maxpos, false);
+
+            if (spawnpos == null)
+            {
+                spawnpos = findSpawnPos(forplayer, etype, minpos, maxpos, true);
+            }
+
+            if (spawnpos != null)
+            {
+                var spawnentity = entity.Api.ClassRegistry.CreateEntity(etype);
+                spawnentity.ServerPos.SetPos(spawnpos);
+                entity.World.SpawnEntity(spawnentity);
+
+                if (cfg.GiveStacks != null)
+                {
+                    foreach (var stack in cfg.GiveStacks)
+                    {
+                        if (stack.Resolve(entity.World, "spawn entity give stack"))
+                        {
+                            entity.Api.Event.EnqueueMainThreadTask(() =>
+                            {
+                                spawnentity.TryGiveItemStack(stack.ResolvedItemstack.Clone());
+                            }, "tradedlggivestack");
+                        }
+                    }
+                }                
+            }
+        }
+
+        private Vec3d findSpawnPos(IPlayer forplayer, EntityProperties etype, BlockPos minpos, BlockPos maxpos, bool rainheightmap)
+        {
+            bool spawned = false;
+            BlockPos tmp = new BlockPos();
+            var ba = entity.World.BlockAccessor;
+            int chunksize = ba.ChunkSize;
+            var collisionTester = entity.World.CollisionTester;
+            var sapi = entity.Api as ICoreServerAPI;
+            Vec3d okspawnpos = null;
+
+            ba.WalkBlocks(minpos, maxpos, (block, x, y, z) =>
+            {
+                if (spawned) return;
+
+                int lz = z % chunksize;
+                int lx = x % chunksize;
+                var mc = ba.GetMapChunkAtBlockPos(tmp.Set(x, y, z));
+                int ty = rainheightmap ? mc.RainHeightMap[lz * chunksize + lx] : (mc.WorldGenTerrainHeightMap[lz * chunksize + lx]+1);
+
+                Vec3d spawnpos = new Vec3d(x + 0.5, ty + 0.1, z + 0.5);
+                Cuboidf collisionBox = etype.SpawnCollisionBox.OmniNotDownGrowBy(0.1f);
+                if (!collisionTester.IsColliding(ba, collisionBox, spawnpos, false))
+                {
+
+                    var resp = sapi.World.Claims.TestAccess(forplayer, spawnpos.AsBlockPos, EnumBlockAccessFlags.BuildOrBreak);
+                    if (resp == EnumWorldAccessResponse.Granted)
+                    {
+                        spawned = true;
+                        okspawnpos = spawnpos;
+                    }
+                }
+
+            }, true);
+
+            return okspawnpos;
+        }
+
         public EntityBehaviorConversable(Entity entity) : base(entity)
         {
             world = entity.World;
@@ -133,7 +249,7 @@ namespace Vintagestory.GameContent
 
             if (world.Side == EnumAppSide.Client && !(entity is ITalkUtil))
             {
-                talkUtilInst = new EntityTalkUtil(world.Api as ICoreClientAPI, entity);
+                talkUtilInst = new EntityTalkUtil(world.Api as ICoreClientAPI, entity, false);
             }
         }
 
@@ -146,6 +262,33 @@ namespace Vintagestory.GameContent
             {
                 world.Logger.Error("entity behavior conversable for entity " + entity.Code + ", dialogue path not set. Won't load dialogue.");
                 return;
+            }
+        }
+
+        public override void OnEntitySpawn()
+        {
+            setupTaskBlocker();
+        }
+
+        public override void OnEntityLoaded()
+        {
+            setupTaskBlocker();
+        }
+
+
+        void setupTaskBlocker()
+        {
+            if (entity.Api.Side != EnumAppSide.Server) return;
+            var bhtaskAi = entity.GetBehavior<EntityBehaviorTaskAI>();
+            if (bhtaskAi != null)
+            {
+                bhtaskAi.TaskManager.OnShouldExecuteTask += (task) => ControllerByPlayer.Count == 0 || task is AiTaskIdle || task is AiTaskSeekEntity || task is AiTaskGotoEntity;
+            }
+
+            var bhActivityDriven = entity.GetBehavior<EntityBehaviorActivityDriven>();
+            if (bhActivityDriven != null)
+            {
+                bhActivityDriven.OnShouldRunActivitySystem += () => ControllerByPlayer.Count == 0;
             }
         }
 
@@ -220,6 +363,20 @@ namespace Vintagestory.GameContent
             }
 
             if (!entity.Alive) return;
+
+            if (CanConverse != null)
+            {
+                foreach (CanConverseDelegate act in CanConverse.GetInvocationList())
+                {
+                    if (!act.Invoke(out string errorMsg))
+                    {
+                        ((byEntity as EntityPlayer)?.Player as IServerPlayer)?.SendIngameError("cantconvese", Lang.Get(errorMsg));
+                        return;
+                    }
+                }
+            }
+
+            GetOrCreateController(byEntity as EntityPlayer);
 
             handled = EnumHandling.PreventDefault;
 
@@ -321,8 +478,12 @@ namespace Vintagestory.GameContent
                 Dialog = null;
             }
         }
+    }
 
-        
-
+    internal class DlgSpawnEntityConfig
+    {
+        public WeightedCode[] Codes;
+        public float Range;
+        public JsonItemStack[] GiveStacks;
     }
 }

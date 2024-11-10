@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
@@ -29,6 +28,20 @@ namespace Vintagestory.GameContent
         {
             base.OnLoaded(api);
             LoadTypes();
+        }
+
+        public override void OnUnloaded(ICoreAPI api)
+        {
+            var meshRefs = ObjectCacheUtil.TryGet<Dictionary<string, MultiTextureMeshRef>>(api, "ScrollrackMeshesInventory");
+            if (meshRefs?.Count > 0)
+            {
+                foreach (var (_, meshRef) in meshRefs)
+                {
+                    meshRef.Dispose();
+                }
+                ObjectCacheUtil.Delete(api, "ScrollrackMeshesInventory");
+            }
+            base.OnUnloaded(api);
         }
 
         public void LoadTypes()
@@ -183,7 +196,7 @@ namespace Vintagestory.GameContent
         public override void OnNeighbourBlockChange(IWorldAccessor world, BlockPos pos, BlockPos neibpos)
         {
             var beb = GetBlockEntity<BlockEntityScrollRack>(pos);
-            beb.clearUsableSlots();
+            beb?.clearUsableSlots();
 
             base.OnNeighbourBlockChange(world, pos, neibpos);
         }

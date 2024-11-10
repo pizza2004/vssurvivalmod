@@ -73,6 +73,12 @@ namespace Vintagestory.GameContent
                         {
                             world.SpawnItemEntity(stack, blockSel.Position.ToVec3d().AddCopy(0.5, 0.1, 0.5));
                         }
+                        world.Logger.Audit("{0} Took {1}x{2} from Ground at {3}.",
+                            byPlayer.PlayerName,
+                            origStack.StackSize,
+                            stack.Collectible.Code,
+                            blockSel.Position
+                        );
 
                         TreeAttribute tree = new TreeAttribute();
                         tree["itemstack"] = new ItemstackAttribute(origStack.Clone());
@@ -85,7 +91,7 @@ namespace Vintagestory.GameContent
                             world.BlockAccessor.SetBlock(0, blockSel.Position);
                             world.BlockAccessor.TriggerNeighbourBlockUpdate(blockSel.Position);
                         }
-                        world.PlaySoundAt(pickupSound ?? block.GetSounds(world.BlockAccessor, blockSel.Position).Place, byPlayer, null);
+                        world.PlaySoundAt(pickupSound ?? block.GetSounds(world.BlockAccessor, blockSel).Place, byPlayer, null);
                     }
                 }
 

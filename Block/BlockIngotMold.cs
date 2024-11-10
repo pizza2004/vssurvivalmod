@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
@@ -66,7 +67,7 @@ namespace Vintagestory.GameContent
                         ShouldApply = (wi, bs, es) =>
                         {
                             BlockEntityIngotMold betm = api.World.BlockAccessor.GetBlockEntity(bs.Position) as BlockEntityIngotMold;
-                            return betm != null && betm.contentsRight == null && betm.contentsLeft == null;
+                            return betm != null && betm.ContentsRight == null && betm.ContentsLeft == null;
                         }
                     },
                     new WorldInteraction()
@@ -78,7 +79,7 @@ namespace Vintagestory.GameContent
                         GetMatchingStacks = (wi, bs, es) =>
                         {
                             BlockEntityIngotMold betm = api.World.BlockAccessor.GetBlockEntity(bs.Position) as BlockEntityIngotMold;
-                            return (betm != null && betm.quantityMolds < 2) ? wi.Itemstacks : null;
+                            return (betm != null && betm.QuantityMolds < 2) ? wi.Itemstacks : null;
                         }
                     }
                 };
@@ -108,7 +109,7 @@ namespace Vintagestory.GameContent
                         GetMatchingStacks = (wi, bs, es) =>
                         {
                             BlockEntityIngotMold betm = api.World.BlockAccessor.GetBlockEntity(bs.Position) as BlockEntityIngotMold;
-                            return (betm != null && betm.quantityMolds > 1 && !betm.IsFullRight) ? wi.Itemstacks : null;
+                            return (betm != null && betm.QuantityMolds > 1 && !betm.IsFullRight) ? wi.Itemstacks : null;
                         }
                     },
                     new WorldInteraction()
@@ -119,7 +120,7 @@ namespace Vintagestory.GameContent
                         ShouldApply = (wi, bs, es) =>
                         {
                             BlockEntityIngotMold betm = api.World.BlockAccessor.GetBlockEntity(bs.Position) as BlockEntityIngotMold;
-                            return betm != null && betm.quantityMolds > 1 && betm.IsFullRight && betm.IsHardenedRight;
+                            return betm != null && betm.QuantityMolds > 1 && betm.IsFullRight && betm.IsHardenedRight;
                         }
                     },
                     new WorldInteraction()
@@ -131,7 +132,7 @@ namespace Vintagestory.GameContent
                         ShouldApply = (wi, bs, es) =>
                         {
                             BlockEntityIngotMold betm = api.World.BlockAccessor.GetBlockEntity(bs.Position) as BlockEntityIngotMold;
-                            return betm != null && betm.quantityMolds > 1 && betm.contentsRight == null && betm.contentsLeft == null;
+                            return betm != null && betm.QuantityMolds > 1 && betm.ContentsRight == null && betm.ContentsLeft == null;
                         }
                     }
                 };
@@ -146,18 +147,34 @@ namespace Vintagestory.GameContent
         }
 
         Cuboidf[] oneMoldBoxes = new Cuboidf[] { new Cuboidf(0, 0, 0, 1, 0.1875f, 1)  };
-        Cuboidf[] twoMoldBoxes = new Cuboidf[] { new Cuboidf(0, 0, 0, 0.5f, 0.1875f, 1), new Cuboidf(0.5f, 0, 0, 1, 0.1875f, 1) };
+        Cuboidf[] twoMoldBoxesNS = new Cuboidf[] { new Cuboidf(0, 0, 0, 0.5f, 0.1875f, 1), new Cuboidf(0.5f, 0, 0, 1, 0.1875f, 1) };
+        Cuboidf[] twoMoldBoxesEW = new Cuboidf[] { new Cuboidf(0, 0, 0, 1, 0.1875f, 0.5f), new Cuboidf(0, 0, 0.5f, 1, 0.1875f, 1) };
 
         public override Cuboidf[] GetSelectionBoxes(IBlockAccessor world, BlockPos pos)
         {
             BlockEntityIngotMold betm = api.World.BlockAccessor.GetBlockEntity(pos) as BlockEntityIngotMold;
 
-            if (betm == null || betm.quantityMolds == 1)
+            if (betm == null || betm.QuantityMolds == 1)
             {
                 return oneMoldBoxes;
             }
 
-            return twoMoldBoxes;
+            var faceing = BlockFacing.HorizontalFromAngle(betm.MeshAngle);
+            switch (faceing.Index)
+            {
+                case 0:
+                case 2:
+                {
+                    return twoMoldBoxesEW;
+                }
+                default:
+                    return twoMoldBoxesNS;
+            }
+        }
+
+        public override Cuboidf[] GetCollisionBoxes(IBlockAccessor blockAccessor, BlockPos pos)
+        {
+            return GetSelectionBoxes(blockAccessor, pos);
         }
 
         public override void OnHeldInteractStart(ItemSlot itemslot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
@@ -180,7 +197,7 @@ namespace Vintagestory.GameContent
                 {
                     handling = EnumHandHandling.PreventDefault;
                 }
-                
+
             }
         }
 
@@ -216,6 +233,17 @@ namespace Vintagestory.GameContent
             base.OnEntityCollide(world, entity, pos, facing, collideSpeed, isImpact);
         }
 
+        public override float GetTraversalCost(BlockPos pos, EnumAICreatureType creatureType)
+        {
+            if (creatureType == EnumAICreatureType.LandCreature || creatureType == EnumAICreatureType.Humanoid)
+            {
+                var be = GetBlockEntity<BlockEntityIngotMold>(pos);
+                if (be?.TemperatureLeft > 300 || be.TemperatureRight > 300) return 10000f;
+            }
+
+            return 0;
+        }
+
         public override bool TryPlaceBlock(IWorldAccessor world, IPlayer byPlayer, ItemStack itemstack, BlockSelection blockSel, ref string failureCode)
         {
             if (!byPlayer.Entity.Controls.ShiftKey)
@@ -242,34 +270,62 @@ namespace Vintagestory.GameContent
         {
             List<ItemStack> stacks = new List<ItemStack>();
 
-            BlockEntityIngotMold bei = world.BlockAccessor.GetBlockEntity(pos) as BlockEntityIngotMold;
+            var bei = world.BlockAccessor.GetBlockEntity(pos) as BlockEntityIngotMold;
             if (bei != null)
             {
-                stacks.Add(new ItemStack(this, bei.quantityMolds));
+                var moldsAmount = bei.QuantityMolds;
+                if (bei.ShatteredLeft)
+                {
+                    moldsAmount--;
+                }
+                if(bei.ShatteredRight)
+                {
+                    moldsAmount--;
+                }
 
-                ItemStack stackl = bei.GetLeftContents();
+                stacks.Add(new ItemStack(this, moldsAmount));
+
+                ItemStack stackl = bei.GetStateAwareContentsLeft();
                 if (stackl != null)
                 {
                     stacks.Add(stackl);
                 }
-                ItemStack stackr = bei.GetRightContents();
+                ItemStack stackr = bei.GetStateAwareContentsRight();
                 if (stackr != null)
                 {
                     stacks.Add(stackr);
                 }
             } else
             {
-                stacks.Add(new ItemStack(this, 1));
+                stacks.Add(new ItemStack(this));
             }
 
             return stacks.ToArray();
         }
-        
+
 
         public override WorldInteraction[] GetPlacedBlockInteractionHelp(IWorldAccessor world, BlockSelection selection, IPlayer forPlayer)
         {
             return (selection.SelectionBoxIndex == 0 ? interactionsLeft : interactionsRight).Append(base.GetPlacedBlockInteractionHelp(world, selection, forPlayer));
         }
 
+        public override bool DoPlaceBlock(IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel, ItemStack byItemStack)
+        {
+            bool val = base.DoPlaceBlock(world, byPlayer, blockSel, byItemStack);
+
+            if (val && world.BlockAccessor.GetBlockEntity(blockSel.Position) is BlockEntityIngotMold beim)
+            {
+                var targetPos = blockSel.DidOffset ? blockSel.Position.AddCopy(blockSel.Face.Opposite) : blockSel.Position;
+                var dx = byPlayer.Entity.Pos.X - (targetPos.X + blockSel.HitPosition.X);
+                var dz = byPlayer.Entity.Pos.Z - (targetPos.Z + blockSel.HitPosition.Z);
+                var angleHor = (float)Math.Atan2(dx, dz);
+
+                var roundRad = ((int)Math.Round(angleHor / GameMath.PIHALF)) * GameMath.PIHALF;
+                beim.MeshAngle = roundRad;
+                beim.MarkDirty();
+            }
+
+            return val;
+        }
     }
 }

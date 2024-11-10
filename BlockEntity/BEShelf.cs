@@ -14,7 +14,7 @@ namespace Vintagestory.GameContent
         public override InventoryBase Inventory => inv;
 
         public override string InventoryClassName => "shelf";
-        
+
         public override string AttributeTransformCode => "onshelfTransform";
 
         Block block;
@@ -30,16 +30,19 @@ namespace Vintagestory.GameContent
         {
             block = api.World.BlockAccessor.GetBlock(Pos);
             base.Initialize(api);
+
+            // Must be added after Initialize(), so we can override the transition speed value
+            inv.OnAcquireTransitionSpeed += Inv_OnAcquireTransitionSpeed;
         }
 
-        protected override float Inventory_OnAcquireTransitionSpeed(EnumTransitionType transType, ItemStack stack, float baseMul)
+        private float Inv_OnAcquireTransitionSpeed(EnumTransitionType transType, ItemStack stack, float baseMul)
         {
-            if (transType == EnumTransitionType.Dry || transType == EnumTransitionType.Melt) return room?.ExitCount == 0 ? 2f : 0.5f;
+            if (transType == EnumTransitionType.Dry || transType == EnumTransitionType.Melt) return container.Room?.ExitCount == 0 ? 2f : 0.5f;
             if (Api == null) return 0;
 
             if (transType == EnumTransitionType.Perish || transType == EnumTransitionType.Ripen)
             {
-                float perishRate = GetPerishRate();
+                float perishRate = container.GetPerishRate();
                 if (transType == EnumTransitionType.Ripen)
                 {
                     return GameMath.Clamp((1 - perishRate - 0.5f) * 3, 0, 1);
@@ -68,10 +71,15 @@ namespace Vintagestory.GameContent
                 if (colObj.Attributes != null && colObj.Attributes["shelvable"].AsBool(false) == true)
                 {
                     AssetLocation sound = slot.Itemstack?.Block?.Sounds?.Place;
-                    
+                    var stackName = slot.Itemstack?.Collectible.Code;
                     if (TryPut(slot, blockSel))
                     {
                         Api.World.PlaySoundAt(sound != null ? sound : new AssetLocation("sounds/player/build"), byPlayer.Entity, byPlayer, true, 16);
+                        Api.World.Logger.Audit("{0} Put 1x{1} into Shelf at {2}.",
+                            byPlayer.PlayerName,
+                            stackName,
+                            Pos
+                        );
                         MarkDirty();
                         return true;
                     }
@@ -80,11 +88,8 @@ namespace Vintagestory.GameContent
                 }
             }
 
-
             return false;
         }
-
-
 
         private bool TryPut(ItemSlot slot, BlockSelection blockSel)
         {
@@ -130,8 +135,13 @@ namespace Vintagestory.GameContent
 
                     if (stack.StackSize > 0)
                     {
-                        Api.World.SpawnItemEntity(stack, Pos.ToVec3d().Add(0.5, 0.5, 0.5));
+                        Api.World.SpawnItemEntity(stack, Pos);
                     }
+                    Api.World.Logger.Audit("{0} Took 1x{1} from Shelf at {2}.",
+                        byPlayer.PlayerName,
+                        stack.Collectible.Code,
+                        Pos
+                    );
 
                     (Api as ICoreClientAPI)?.World.Player.TriggerFpAnimation(EnumHandInteract.HeldItemInteract);
                     MarkDirty();
@@ -152,7 +162,7 @@ namespace Vintagestory.GameContent
                 float y = index >= 4 ? 10 / 16f : 2 / 16f;
                 float z = (index % 2 == 0) ? 4 / 16f : 10 / 16f;
 
-                tfMatrices[index] = 
+                tfMatrices[index] =
                     new Matrixf()
                     .Translate(0.5f, 0, 0.5f)
                     .RotateYDeg(block.Shape.rotateY)
@@ -174,8 +184,6 @@ namespace Vintagestory.GameContent
             RedrawAfterReceivingTreeAttributes(worldForResolving);     // Redraw on client after we have completed receiving the update from server
         }
 
-
-
         #region Block info
 
         public override void GetBlockInfo(IPlayer forPlayer, StringBuilder sb)
@@ -183,12 +191,11 @@ namespace Vintagestory.GameContent
             base.GetBlockInfo(forPlayer, sb);
 
 
-            float ripenRate = GameMath.Clamp(((1 - GetPerishRate()) - 0.5f) * 3, 0, 1);
+            float ripenRate = GameMath.Clamp(((1 - container.GetPerishRate()) - 0.5f) * 3, 0, 1);
             if (ripenRate > 0)
             {
                 sb.Append(Lang.Get("Suitable spot for food ripening."));
             }
-
 
             sb.AppendLine();
 
@@ -310,7 +317,6 @@ namespace Vintagestory.GameContent
                     }
                 }
 
-
                 if (appendLine) dsc.AppendLine();
             }
 
@@ -365,12 +371,11 @@ namespace Vintagestory.GameContent
             DummyInventory dummyInv = new DummyInventory(Api);
 
             ItemSlot contentSlot = BlockCrock.GetDummySlotForFirstPerishableStack(Api.World, stacks, null, dummyInv);
-            dummyInv.OnAcquireTransitionSpeed = (transType, stack, mul) =>
+            dummyInv.OnAcquireTransitionSpeed += (transType, stack, mul) =>
             {
                 return mul * crock.GetContainingTransitionModifierContained(world, inSlot, transType) * inv.GetTransitionSpeedMul(transType, stack);
             };
 
-            
             TransitionState[] transitionStates = contentSlot.Itemstack?.Collectible.UpdateAndGetTransitionStates(Api.World, contentSlot);
             bool addNewLine = true;
             if (transitionStates != null)
@@ -420,8 +425,7 @@ namespace Vintagestory.GameContent
                     }
                 }
             }
-            
-            
+
             if (addNewLine)
             {
                 dsc.AppendLine("");

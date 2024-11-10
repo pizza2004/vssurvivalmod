@@ -49,7 +49,7 @@ namespace Vintagestory.GameContent
         /// <summary>
         /// For modders, change this value if you want to increase auction times, does not affect cost
         /// </summary>
-        public int DurationWeeksMul = 3;
+        public int DurationWeeksMul = 6;
 
         /// <summary>
         /// The % cut the trader takes from the profits (default is 0.1 which is 10%)
@@ -66,11 +66,11 @@ namespace Vintagestory.GameContent
         public int DeliveryCostsByDistance(double distance)
         {
             // x/2000 was too expensive, so we use a nonlinar curve
-            // http://fooplot.com/#W3sidHlwZSI6MCwiZXEiOiI1KmxuKCh4LTIwMCkvMTAwMDArMSkiLCJjb2xvciI6IiMwMDAwMDAifSx7InR5cGUiOjAsImVxIjoieC8yMDAwIiwiY29sb3IiOiIjMDAwMDAwIn0seyJ0eXBlIjoxMDAwLCJ3aW5kb3ciOlsiMCIsIjgwMDAwIiwiMCIsIjE1Il0sInNpemUiOls2NDgsMzk4XX1d
-            return (int)Math.Ceiling(5 * Math.Log((distance-200) / 10000 + 1) * DeliveryPriceMul);
+            // https://pfortuny.net/fooplot.com/#W3sidHlwZSI6MCwiZXEiOiI1KmxuKCh4LTIwMCkvMTAwMDArMSkiLCJjb2xvciI6IiMwMDAwMDAifSx7InR5cGUiOjAsImVxIjoieC8yMDAwIiwiY29sb3IiOiIjMDAwMDAwIn0seyJ0eXBlIjoxMDAwLCJ3aW5kb3ciOlsiMCIsIjgwMDAwIiwiMCIsIjE1Il0sInNpemUiOls2NDgsMzk4XX1d
+            return (int)Math.Ceiling(3.5 * Math.Log((distance-200) / 10000 + 1) * DeliveryPriceMul);
         }
 
-        
+
 
         public ItemStack SingleCurrencyStack;
 
@@ -121,7 +121,11 @@ namespace Vintagestory.GameContent
 
         private void Event_BlockTexturesLoaded()
         {
-            SingleCurrencyStack = new ItemStack(capi.World.GetItem(new AssetLocation("gear-rusty")));
+            var item = capi.World.GetItem(new AssetLocation("gear-rusty"));
+            if (item != null)
+            {
+                SingleCurrencyStack = new ItemStack(item);
+            }
             loadPricingConfig();
         }
 
@@ -135,7 +139,7 @@ namespace Vintagestory.GameContent
             {
                 if (pkt.Action == EnumAuctionAction.PurchaseAuction || (pkt.Action == EnumAuctionAction.RetrieveAuction && pkt.MoneyReceived))
                 {
-                    capi.Gui.PlaySound(new AssetLocation("sounds/effect/cashregister"), false, 0.25f);  
+                    capi.Gui.PlaySound(new AssetLocation("sounds/effect/cashregister"), false, 0.25f);
                 }
 
                 curTraderClient?.talkUtil.Talk(EnumTalkType.Purchase);
@@ -168,7 +172,7 @@ namespace Vintagestory.GameContent
                         remove(activeAuctions, auction);
                     }
                     if (
-                        (auction.SellerUid == capi.World.Player.PlayerUID) || 
+                        (auction.SellerUid == capi.World.Player.PlayerUID) ||
                         (auction.State == EnumAuctionState.Sold && auction.BuyerUid == capi.World.Player.PlayerUID)
                     )
                     {
@@ -177,7 +181,7 @@ namespace Vintagestory.GameContent
                     {
                         remove(ownAuctions, auction);
                     }
-                    
+
                 }
             }
 
@@ -338,7 +342,7 @@ namespace Vintagestory.GameContent
             switch (pkt.Action)
             {
                 case EnumAuctionAction.EnterAuctionHouse:
-                    
+
                     if (!createAuctionSlotByPlayer.ContainsKey(fromPlayer.PlayerUID))
                     {
                         var ainv = createAuctionSlotByPlayer[fromPlayer.PlayerUID] = new InventoryGeneric(1, "auctionslot-" + fromPlayer.PlayerUID, sapi);
@@ -372,10 +376,16 @@ namespace Vintagestory.GameContent
                             {
                                 sapi.World.SpawnItemEntity(stack, fromPlayer.Entity.Pos.XYZ);
                             }
+
+                            sapi.World.Logger.Audit("{0} Got 1x{1} from Auction at {2}.",
+                                fromPlayer.PlayerName,
+                                stack.Collectible.Code,
+                                fromPlayer.Entity.Pos
+                            );
                         }
                         serverCh.SendPacket(new AuctionActionResponsePacket() { Action = pkt.Action, AuctionId = pkt.AuctionId, ErrorCode = failureCode, MoneyReceived = stack?.Collectible.Attributes?["currency"].Exists == true }, fromPlayer);
 
-                        
+
 
                         break;
                     }
@@ -696,7 +706,7 @@ namespace Vintagestory.GameContent
                     auction.MoneyCollected = true;
 
                     var stack = SingleCurrencyStack.Clone();
-                    
+
                     stack.StackSize = auction.Price - auction.TraderCut;
 
                     return stack;
@@ -748,7 +758,9 @@ namespace Vintagestory.GameContent
 
         private void Event_SaveGameLoaded()
         {
-            SingleCurrencyStack = new ItemStack(sapi.World.GetItem(new AssetLocation("gear-rusty")));
+            var item = sapi.World.GetItem(new AssetLocation("gear-rusty"));
+            if (item == null) return;
+            SingleCurrencyStack = new ItemStack(item);
 
             byte[] data = sapi.WorldManager.SaveGame.GetData("auctionsData");
             if (data != null)

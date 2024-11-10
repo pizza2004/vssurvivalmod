@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
+using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
@@ -85,9 +86,11 @@ namespace Vintagestory.GameContent
 
         private void onFootStep(EntityPlayer entity)
         {
-            IInventory gearInv = entity.GearInventory;
-            
-            foreach (var slot in gearInv)
+            //IInventory gearInv = entity.GearInventory;
+            var inv = entity.GetBehavior<EntityBehaviorPlayerInventory>()?.Inventory;
+            if (inv == null) return;
+
+            foreach (var slot in inv)
             {
                 ItemWearable item;
                 if (slot.Empty || (item = slot.Itemstack.Collectible as ItemWearable) == null) continue;
@@ -152,7 +155,8 @@ namespace Vintagestory.GameContent
                 EnumCharacterDressType[] dressTargets = clothingDamageTargetsByAttackTacket[attackTarget];
                 EnumCharacterDressType target = dressTargets[api.World.Rand.Next(dressTargets.Length)];
 
-                ItemSlot targetslot = player.Entity.GearInventory[(int)target];
+                ItemSlot targetslot = inv[(int)target];
+                //ItemSlot targetslot = player.Entity.GearInventory[(int)target];
                 if (!targetslot.Empty)
                 {
                     // Wolf: 10 hp damage = 10% condition loss
@@ -220,6 +224,7 @@ namespace Vintagestory.GameContent
         private float applyShieldProtection(IPlayer player, float damage, DamageSource dmgSource)
         {
             double horizontalAngleProtectionRange = 120 / 2 * GameMath.DEG2RAD;
+            float unabsorbedDamage = damage;
 
             ItemSlot[] shieldSlots = new ItemSlot[] { player.Entity.LeftHandItemSlot, player.Entity.RightHandItemSlot };
 
@@ -229,11 +234,20 @@ namespace Vintagestory.GameContent
                 var attr = shieldSlot.Itemstack?.ItemAttributes?["shield"];
                 if (attr == null || !attr.Exists) continue;
 
-                string usetype = player.Entity.Controls.Sneak ? "active" : "passive";
+                bool projectile = dmgSource.SourceEntity?.Properties.Attributes?["isProjectile"].AsBool(false) ?? false;
+                string usetype = player.Entity.Controls.Sneak && player.Entity.Attributes.GetInt("aiming") != 1 ? "active" : "passive";
 
-                float dmgabsorb = attr["damageAbsorption"][usetype].AsFloat(0);
-                float chance = attr["protectionChance"][usetype].AsFloat(0);
-                (player as IServerPlayer)?.SendMessage(GlobalConstants.DamageLogChatGroup, Lang.Get("{0:0.#} of {1:0.#} damage blocked by shield", Math.Min(dmgabsorb, damage), damage), EnumChatType.Notification);
+                float flatdmgabsorb = 0;
+                float chance = 0;
+                if (projectile && attr["protectionChance"][usetype + "-projectile"].Exists)
+                {
+                    chance = attr["protectionChance"][usetype + "-projectile"].AsFloat(0);
+                    flatdmgabsorb = attr["projectileDamageAbsorption"].AsFloat(2);
+                } else
+                {
+                    chance = attr["protectionChance"][usetype].AsFloat(0);
+                    flatdmgabsorb = attr["damageAbsorption"].AsFloat(2);
+                }
 
                 double dx;
                 double dy;
@@ -261,7 +275,7 @@ namespace Vintagestory.GameContent
                     break;
                 }
 
-                double playerYaw = player.Entity.Pos.Yaw + GameMath.PIHALF;
+                double playerYaw = player.Entity.Pos.Yaw;
                 double playerPitch = player.Entity.Pos.Pitch;
                 double attackYaw = Math.Atan2((double)dx, (double)dz);
                 double a = dy;
@@ -269,6 +283,14 @@ namespace Vintagestory.GameContent
                 float attackPitch = (float)Math.Atan2(a, b);
 
                 bool verticalAttack = Math.Abs(attackPitch) > 65 * GameMath.DEG2RAD;
+
+                if (projectile)
+                {
+                    dx = dmgSource.SourceEntity.SidedPos.Motion.X;
+                    dy = dmgSource.SourceEntity.SidedPos.Motion.Y;
+                    dz = dmgSource.SourceEntity.SidedPos.Motion.Z;
+                    verticalAttack = Math.Sqrt(dx * dx + dz * dz) < Math.Abs(dy);
+                }
 
                 bool inProtectionRange;
                 if (verticalAttack)
@@ -279,12 +301,23 @@ namespace Vintagestory.GameContent
                     inProtectionRange = Math.Abs(GameMath.AngleRadDistance((float)playerYaw, (float)attackYaw)) < horizontalAngleProtectionRange;
                 }
 
-                if (inProtectionRange && api.World.Rand.NextDouble() < chance)
+                if (inProtectionRange)
                 {
-                    damage = Math.Max(0, damage - dmgabsorb);
+                    float totaldmgabsorb = 0;
+                    var rndval = api.World.Rand.NextDouble();
 
-                    var loc = shieldSlot.Itemstack.ItemAttributes["blockSound"].AsString("held/shieldblock");
-                    api.World.PlaySoundAt(AssetLocation.Create(loc, shieldSlot.Itemstack.Collectible.Code.Domain).WithPathPrefixOnce("sounds/").WithPathAppendixOnce(".ogg"), player, null);
+                    if (rndval < chance)
+                    {
+                        totaldmgabsorb += flatdmgabsorb;
+                    }
+
+                    (player as IServerPlayer)?.SendMessage(GlobalConstants.DamageLogChatGroup, Lang.Get("{0:0.#} of {1:0.#} damage blocked by shield ({2} use)", Math.Min(totaldmgabsorb, damage), damage, usetype), EnumChatType.Notification);
+                    damage = Math.Max(0, damage - totaldmgabsorb);
+
+                    string key = "blockSound" + ((unabsorbedDamage > 6) ? "Heavy" : "Light");
+                    var loc = shieldSlot.Itemstack.ItemAttributes["shield"][key].AsString("held/shieldblock-wood-light");
+                    var sloc = AssetLocation.Create(loc, shieldSlot.Itemstack.Collectible.Code.Domain).WithPathPrefixOnce("sounds/").WithPathAppendixOnce(".ogg");
+                    api.World.PlaySoundAt(sloc, player, null);
                     
                     (api as ICoreServerAPI).Network.BroadcastEntityPacket(player.Entity.EntityId, (int)EntityServerPacketId.PlayPlayerAnim, SerializerUtil.Serialize("shieldBlock" + ((i == 0) ? "L" : "R")));
                     

@@ -146,7 +146,7 @@ namespace Vintagestory.ServerMods
             int endy = Math.Max(workspace.StartMarker.Y, workspace.EndMarker.Y);
             int startz = Math.Min(workspace.StartMarker.Z, workspace.EndMarker.Z);
             int endZ = Math.Max(workspace.StartMarker.Z, workspace.EndMarker.Z);
-            BlockPos pos = new BlockPos();
+            BlockPos pos = new BlockPos(player.Entity.Pos.Dimension);
 
             IBulkBlockAccessor ba = api.World.BulkBlockAccessor;
 
@@ -160,7 +160,7 @@ namespace Vintagestory.ServerMods
                     {
                         pos.Set(x, y, z);
 
-                        Block block = ba.GetBlock(x, y, z);
+                        Block block = ba.GetBlock(pos);
                         if (block is BlockMicroBlock && block.Id != targetBlock.Id)
                         {
                             cnt++;
@@ -206,7 +206,7 @@ namespace Vintagestory.ServerMods
             int endy = Math.Max(workspace.StartMarker.Y, workspace.EndMarker.Y);
             int startz = Math.Min(workspace.StartMarker.Z, workspace.EndMarker.Z);
             int endZ = Math.Max(workspace.StartMarker.Z, workspace.EndMarker.Z);
-            BlockPos pos = new BlockPos();
+            BlockPos pos = new BlockPos(textCommandCallingArgs.Caller.Player.Entity.Pos.Dimension);
 
             Dictionary<string, Block> blocksByName = new Dictionary<string, Block>();
             foreach (var block in api.World.Blocks)
@@ -225,7 +225,7 @@ namespace Vintagestory.ServerMods
                     {
                         pos.Set(x, y, z);
 
-                        Block block = api.World.BlockAccessor.GetBlock(x, y, z);
+                        Block block = api.World.BlockAccessor.GetBlock(pos);
                         if (block is BlockChisel)
                         {
                             BlockEntityChisel bechisel = api.World.BlockAccessor.GetBlockEntity(pos) as BlockEntityChisel;
@@ -316,7 +316,7 @@ namespace Vintagestory.ServerMods
             {
                 Block potblock = api.World.GetBlock(new AssetLocation(parts[0] + "-" + parts[1]));
                 ItemStack potStack = new ItemStack(potblock);
-                api.World.SpawnItemEntity(potStack, pos.ToVec3d().Add(0.5, 0.5, 0.5));
+                api.World.SpawnItemEntity(potStack, pos);
 
                 Block plantBlock = null;
 
@@ -336,7 +336,7 @@ namespace Vintagestory.ServerMods
                 if (plantBlock != null)
                 {
                     ItemStack plantStack = new ItemStack(plantBlock);
-                    api.World.SpawnItemEntity(plantStack, pos.ToVec3d().Add(0.5, 0.5, 0.5));
+                    api.World.SpawnItemEntity(plantStack, pos);
                 }
             }
         }

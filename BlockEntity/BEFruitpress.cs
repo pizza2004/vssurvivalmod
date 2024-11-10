@@ -195,7 +195,7 @@ namespace Vintagestory.GameContent
                 BlockFacing face = BlockFacing.HORIZONTALS[i];
 
                 liquidParticles.Color = capi.BlockTextureAtlas.GetRandomColor(renderer.juiceTexPos, rand.Next(TextureAtlasPosition.RndColorsLength));
-                
+
                 Vec3d minPos = face.Plane.Startd.Add(-0.5, 0, -0.5);
                 Vec3d maxPos = face.Plane.Endd.Add(-0.5, 0, -0.5);
 
@@ -239,7 +239,7 @@ namespace Vintagestory.GameContent
 
             if (Api.Side == EnumAppSide.Server && CompressAnimActive && squeezeRel < 1 && pressSqueezeRel <= squeezeRel && !squeezeSoundPlayed && juiceableLitresLeft > 0)
             {
-                Api.World.PlaySoundAt(new AssetLocation("sounds/player/wetclothsqueeze.ogg"), Pos.X + 0.5, Pos.Y + 0.5, Pos.Z + 0.5, null, false);
+                Api.World.PlaySoundAt(new AssetLocation("sounds/player/wetclothsqueeze.ogg"), Pos, 0, null, false);
                 squeezeSoundPlayed = true;
             }
 
@@ -320,7 +320,7 @@ namespace Vintagestory.GameContent
                 compressAnimMeta.AnimationSpeed = 0.5f;
                 animUtil.StartAnimation(compressAnimMeta);
                 squeezeSoundPlayed = false;
-                
+
                 (Api as ICoreClientAPI).Network.SendBlockEntityPacket(Pos, PacketIdScrewStart);
 
                 if (listenerId == 0)
@@ -409,8 +409,19 @@ namespace Vintagestory.GameContent
                     removeItems = desiredTransferAmount;
                 }
 
-                if (removeItems > 0) {
+
+                if (removeItems > 0)
+                {
+                    var stackCode = handslot.Itemstack.Collectible.Code;
                     handslot.TakeOut(removeItems);
+
+
+                    Api.World.Logger.Audit("{0} Put {1}x{2} into Fruitpress at {3}.",
+                        byPlayer.PlayerName,
+                        removeItems,
+                        stackCode,
+                        blockSel.Position
+                    );
 
                     mashStack.Attributes.SetDouble("juiceableLitresLeft", juiceableLitresLeft += transferableLitres);
                     mashStack.Attributes.SetDouble("juiceableLitresTransfered", juiceableLitresTransfered += usedLitres);
@@ -431,8 +442,13 @@ namespace Vintagestory.GameContent
 
             if (!byPlayer.InventoryManager.TryGiveItemstack(mashStack, true))
             {
-                Api.World.SpawnItemEntity(mashStack, Pos.ToVec3d().Add(0.5, 0.5, 0.5));
+                Api.World.SpawnItemEntity(mashStack, Pos);
             }
+            Api.World.Logger.Audit("{0} Took 1x{1} from Fruitpress at {2}.",
+                byPlayer.PlayerName,
+                mashStack.Collectible.Code,
+                blockSel.Position
+            );
 
             MashSlot.Itemstack = null;
             renderer?.reloadMeshes(null, true);
@@ -454,10 +470,15 @@ namespace Vintagestory.GameContent
             {
                 if (!byPlayer.InventoryManager.TryGiveItemstack(BucketSlot.Itemstack, true))
                 {
-                    Api.World.SpawnItemEntity(BucketSlot.Itemstack, Pos.ToVec3d().Add(0.5, 0.5, 0.5));
+                    Api.World.SpawnItemEntity(BucketSlot.Itemstack, Pos);
                 }
+                Api.World.Logger.Audit("{0} Took 1x{1} from Fruitpress at {2}.",
+                    byPlayer.PlayerName,
+                    BucketSlot.Itemstack.Collectible.Code,
+                    blockSel.Position
+                );
 
-                if (BucketSlot.Itemstack.Block != null) Api.World.PlaySoundAt(BucketSlot.Itemstack.Block.Sounds.Place, Pos.X + 0.5, Pos.Y, Pos.Z + 0.5, byPlayer);
+                if (BucketSlot.Itemstack.Block != null) Api.World.PlaySoundAt(BucketSlot.Itemstack.Block.Sounds.Place, Pos, -0.5, byPlayer);
 
                 BucketSlot.Itemstack = null;
                 MarkDirty(true);
@@ -469,10 +490,15 @@ namespace Vintagestory.GameContent
                 bool moved = handslot.TryPutInto(Api.World, BucketSlot, 1) > 0;
                 if (moved)
                 {
+                    Api.World.Logger.Audit("{0} Put 1x{1} into Fruitpress at {2}.",
+                        byPlayer.PlayerName,
+                        BucketSlot.Itemstack.Collectible.Code,
+                        blockSel.Position
+                    );
                     handslot.MarkDirty();
                     MarkDirty(true);
                     genBucketMesh();
-                    Api.World.PlaySoundAt(handStack.Block.Sounds.Place, Pos.X + 0.5, Pos.Y, Pos.Z + 0.5, byPlayer);
+                    Api.World.PlaySoundAt(handStack.Block.Sounds.Place, Pos, -0.5, byPlayer);
                 }
             }
 
@@ -584,7 +610,7 @@ namespace Vintagestory.GameContent
                 {
                     if (!MashSlot.Empty && juiceableLitresLeft > 0 && !CompressAnimActive)
                     {
-                        Api.World.PlaySoundAt(new AssetLocation("sounds/player/wetclothsqueeze.ogg"), Pos.X + 0.5, Pos.Y + 0.5, Pos.Z + 0.5, null, false);
+                        Api.World.PlaySoundAt(new AssetLocation("sounds/player/wetclothsqueeze.ogg"), Pos, 0, null, false);
                     }
 
                     animUtil.StartAnimation(compressAnimMeta);
@@ -723,4 +749,3 @@ namespace Vintagestory.GameContent
         }
     }
 }
-    

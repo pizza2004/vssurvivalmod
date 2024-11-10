@@ -1,13 +1,14 @@
 ﻿using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
+using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
 using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
-using Vintagestory.API.Server;
 using Vintagestory.API.Util;
 
 namespace Vintagestory.GameContent
@@ -32,7 +33,14 @@ namespace Vintagestory.GameContent
         public AssetLocation ShapePath { get; set; }
         public Shape ShapeResolved { get; set; }
         public string HashKey => Code;
-        public bool Randomize { get; set; } = true;
+        public bool RandomizeYSize { get; set; } = true;
+
+        [Obsolete("Use RandomizeYSize instead")]
+        public bool Randomize
+        {
+            get { return RandomizeYSize; }
+            set { RandomizeYSize = value; }
+        }
         public bool Climbable { get; set; }
         public byte[] LightHsv { get; set; }
         public Dictionary<string, CompositeTexture> Textures { get; set; }
@@ -41,6 +49,9 @@ namespace Vintagestory.GameContent
         public Dictionary<string, bool> SideAttachable { get; set; }
         public BlockDropItemStack[] Drops { get; set; }
         public int Reparability { get; set; }
+
+        public string HeldReadyAnim { get; set; }
+        public string HeldIdleAnim { get; set; }
 
         public bool CanAttachBlockAt(Vec3f blockRot, BlockFacing blockFace, Cuboidi attachmentArea = null)
         {
@@ -86,13 +97,14 @@ namespace Vintagestory.GameContent
         }
     }
 
-    public class BlockClutter : BlockShapeFromAttributes
+    public class BlockClutter : BlockShapeFromAttributes, ISearchTextProvider
     {
         public override string ClassType => "clutter";
 
         public Dictionary<string, ClutterTypeProps> clutterByCode = new Dictionary<string, ClutterTypeProps>();
         public override IEnumerable<IShapeTypeProps> AllTypes => clutterByCode.Values;
         string basePath;
+
 
 
         public override void OnLoaded(ICoreAPI api)
@@ -179,6 +191,22 @@ namespace Vintagestory.GameContent
             return type;
         }
 
+        public override string GetHeldTpIdleAnimation(ItemSlot activeHotbarSlot, Entity forEntity, EnumHand hand)
+        {
+            string type = activeHotbarSlot.Itemstack.Attributes.GetString("type", "");
+            var cprops = GetTypeProps(type, activeHotbarSlot.Itemstack, null);
+
+            return cprops?.HeldIdleAnim ?? base.GetHeldTpIdleAnimation(activeHotbarSlot, forEntity, hand);
+        }
+
+        public override string GetHeldReadyAnimation(ItemSlot activeHotbarSlot, Entity forEntity, EnumHand hand)
+        {
+            string type = activeHotbarSlot.Itemstack.Attributes.GetString("type", "");
+            var cprops = GetTypeProps(type, activeHotbarSlot.Itemstack, null);
+
+            return cprops?.HeldReadyAnim ?? base.GetHeldReadyAnimation(activeHotbarSlot, forEntity, hand);
+        }
+
         public override bool IsClimbable(BlockPos pos)
         {
             var bec = GetBEBehavior<BEBehaviorShapeFromAttributes>(pos);
@@ -204,6 +232,16 @@ namespace Vintagestory.GameContent
 
         public override void GetHeldItemInfo(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
         {
+            string type = baseInfo(inSlot, dsc, world, withDebugInfo);
+
+            if ((api as ICoreClientAPI)?.World.Player.WorldData.CurrentGameMode == EnumGameMode.Creative)
+            {
+                dsc.AppendLine(Lang.Get("Clutter type: {0}", type));
+            }
+        }
+
+        private string baseInfo(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
+        {
             base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
 
             dsc.AppendLine(Lang.Get("Unusable clutter"));
@@ -215,7 +253,21 @@ namespace Vintagestory.GameContent
                 dsc.AppendLine(Lang.Get("Pattern: {0}", Lang.Get("bannerpattern-" + parts[1])));
                 dsc.AppendLine(Lang.Get("Segment: {0}", Lang.Get("bannersegment-" + parts[3])));
             }
+
+            return type;
         }
+
+        public string GetSearchText(IWorldAccessor world, ItemSlot inSlot)
+        {
+            StringBuilder dsc = new StringBuilder();
+            baseInfo(inSlot, dsc, world, false);
+
+            string type = inSlot.Itemstack.Attributes.GetString("type", "");
+            dsc.AppendLine(Lang.Get("Clutter type: {0}", type));
+
+            return dsc.ToString();
+        }
+
     }
 
 }

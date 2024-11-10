@@ -1,5 +1,4 @@
-﻿using System;
-using Vintagestory.API.Client;
+﻿using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
@@ -13,9 +12,6 @@ namespace Vintagestory.GameContent
         public Block trunkTopMedium;
         public Block trunkTopOld;
         public Block foliage;
-
-        static Random rand = new Random();
-
 
         public override void OnLoaded(ICoreAPI api)
         {
@@ -67,25 +63,25 @@ namespace Vintagestory.GameContent
         }
 
 
-        public void GrowTree(IBlockAccessor blockAccessor, BlockPos pos, TreeGenParams treeGenParams)
+        public void GrowTree(IBlockAccessor blockAccessor, BlockPos pos, TreeGenParams treeGenParams, IRandom rand)
         {
             float f = treeGenParams.otherBlockChance == 0 ? 1 + (float)rand.NextDouble() * 2.5f : 1.5f + (float)rand.NextDouble() * 4;
             int quantity = GameMath.RoundRandom(rand, f);
 
             while (quantity-- > 0)
             {
-                GrowOneFern(blockAccessor, pos.UpCopy(), treeGenParams.size, treeGenParams.vinesGrowthChance);
+                GrowOneFern(blockAccessor, pos.UpCopy(), treeGenParams.size, treeGenParams.vinesGrowthChance, rand);
 
                 // Potentially grow another one nearby
-                pos.X += rand.Next(8) - 4;
-                pos.Z += rand.Next(8) - 4;
+                pos.X += rand.NextInt(8) - 4;
+                pos.Z += rand.NextInt(8) - 4;
 
                 // Test up to 2 blocks up and down.
                 bool foundSuitableBlock = false;
                 for (int y = 2; y >= -2; y--)
                 {
-                    Block block = blockAccessor.GetBlock(pos.X, pos.Y + y, pos.Z);
-                    if (block.Fertility > 0 && !blockAccessor.GetBlock(pos.X, pos.Y + y + 1, pos.Z, BlockLayersAccess.Fluid).IsLiquid())
+                    Block block = blockAccessor.GetBlock(pos.X, pos.InternalY + y, pos.Z);
+                    if (block.Fertility > 0 && !blockAccessor.GetBlock(pos.X, pos.InternalY + y + 1, pos.Z, BlockLayersAccess.Fluid).IsLiquid())
                     {
                         pos.Y = pos.Y + y;
                         foundSuitableBlock = true;
@@ -95,12 +91,12 @@ namespace Vintagestory.GameContent
                 if (!foundSuitableBlock) break;
             }
 
-            
+
         }
 
-        private void GrowOneFern(IBlockAccessor blockAccessor, BlockPos upos, float sizeModifier, float vineGrowthChance)
+        private void GrowOneFern(IBlockAccessor blockAccessor, BlockPos upos, float sizeModifier, float vineGrowthChance, IRandom rand)
         {
-            int height = GameMath.Clamp((int)(sizeModifier * (2 + rand.Next(6))), 2, 6);
+            int height = GameMath.Clamp((int)(sizeModifier * (2 + rand.NextInt(6))), 2, 6);
 
             Block trunkTop = height > 2 ? trunkTopOld : trunkTopMedium;
             if (height == 1) trunkTop = trunkTopYoung;
@@ -111,7 +107,7 @@ namespace Vintagestory.GameContent
                 if (i == height - 1) toplaceblock = foliage;
                 if (i == height - 2) toplaceblock = trunkTop;
 
-                if (!blockAccessor.GetBlock(upos.X, upos.Y + i, upos.Z).IsReplacableBy(toplaceblock)) return;
+                if (!blockAccessor.GetBlock(upos.X, upos.InternalY + i, upos.Z).IsReplacableBy(toplaceblock)) return;
             }
 
             for (int i = 0; i < height; i++)

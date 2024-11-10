@@ -262,7 +262,7 @@ namespace Vintagestory.GameContent
 
                 pile.MarkDirty();
                 world.BlockAccessor.MarkBlockDirty(pos);
-                world.PlaySoundAt(pile.SoundLocation, pos.X, pos.Y, pos.Z, player, true);
+                world.PlaySoundAt(pile.SoundLocation, pos, -0.5, player, true);
             }
 
             return true;
@@ -276,7 +276,7 @@ namespace Vintagestory.GameContent
                 world.BlockAccessor.BreakBlock(pos, null);
                 return;
             }
-      
+
             Block neibBlock = world.BlockAccessor.GetBlock(neibpos);
             Block neibliqBlock = world.BlockAccessor.GetBlock(neibpos, BlockLayersAccess.Fluid);
             if (neibBlock.Attributes?.IsTrue("smothersFire") == true || neibliqBlock.Attributes?.IsTrue("smothersFire") == true)
@@ -312,7 +312,7 @@ namespace Vintagestory.GameContent
             if (world.Side == EnumAppSide.Server)
             {
                 BlockEntityCoalPile be = world.BlockAccessor.GetBlockEntity(pos) as BlockEntityCoalPile;
-                if (be.IsBurning)
+                if (be?.IsBurning == true)
                 {
                     long lastBurnMs = entity.Attributes.GetLong("lastCoalBurnTick");
 
@@ -333,9 +333,18 @@ namespace Vintagestory.GameContent
                     }
                 }
 
-                
+
             }
         }
 
+        public override float GetTraversalCost(BlockPos pos, EnumAICreatureType creatureType)
+        {
+            if (creatureType == EnumAICreatureType.LandCreature || creatureType == EnumAICreatureType.Humanoid)
+            {
+                return GetBlockEntity<BlockEntityCoalPile>(pos)?.IsBurning == true ? 10000f : 1f;
+            }
+
+            return base.GetTraversalCost(pos, creatureType);
+        }
     }
 }
