@@ -47,7 +47,7 @@ namespace Vintagestory.GameContent
             BlockPos abovePos = blockSel.Position.AddCopy(0, 1, 0);
             IBlockAccessor ba = world.BlockAccessor;
 
-            if (ba.GetBlock(abovePos).Id == 0 && CanPlaceBlock(world, byPlayer, blockSel, ref failureCode))
+            if (CanPlaceBlock(world, byPlayer, blockSel.AddPosCopy(0, 1, 0), ref failureCode) && CanPlaceBlock(world, byPlayer, blockSel, ref failureCode))
             {
                 BlockFacing[] horVer = SuggestedHVOrientation(byPlayer, blockSel);
 
@@ -66,7 +66,9 @@ namespace Vintagestory.GameContent
                 Block upBlock = ba.GetBlock(upBlockCode);
 
                 ba.SetBlock(downBlock.BlockId, blockSel.Position);
+                if (world.Side == EnumAppSide.Server) world.BlockAccessor.TriggerNeighbourBlockUpdate(blockSel.Position);
                 ba.SetBlock(upBlock.BlockId, abovePos);
+                if (world.Side == EnumAppSide.Server) world.BlockAccessor.TriggerNeighbourBlockUpdate(abovePos);
                 return true;
             }
 
@@ -110,12 +112,14 @@ namespace Vintagestory.GameContent
             if (otherPart is BlockDoor && ((BlockDoor)otherPart).IsUpperHalf() != IsUpperHalf())
             {
                 world.BlockAccessor.SetBlock(0, otherPos);
+                if (world.Side == EnumAppSide.Server) world.BlockAccessor.TriggerNeighbourBlockUpdate(otherPos);
             }
 
             Block block = world.BlockAccessor.GetBlock(pos);
             if (block is BlockDoor)
             {
                 world.BlockAccessor.SetBlock(0, pos);
+                if (world.Side == EnumAppSide.Server) world.BlockAccessor.TriggerNeighbourBlockUpdate(pos);
             }
         }
 
@@ -172,6 +176,7 @@ namespace Vintagestory.GameContent
             {
                 world.BlockAccessor.ExchangeBlock(world.BlockAccessor.GetBlock(otherNewCode).BlockId, otherPos);
                 world.BlockAccessor.MarkBlockDirty(otherPos);
+                if (world.Side == EnumAppSide.Server) world.BlockAccessor.TriggerNeighbourBlockUpdate(otherPos);
             }
         }
 

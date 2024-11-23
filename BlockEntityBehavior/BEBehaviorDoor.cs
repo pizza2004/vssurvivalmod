@@ -264,11 +264,24 @@ namespace Vintagestory.GameContent
 
             Api.World.PlaySoundAt(sound, be.Pos.X + 0.5f, be.Pos.Y + 0.5f, be.Pos.Z + 0.5f, byPlayer, EnumSoundType.Sound, pitch);
 
-            if (leftDoor != null && invertHandles) leftDoor.ToggleDoorWing(opened);
-            if (rightDoor != null) rightDoor.ToggleDoorWing(opened);
+            if (leftDoor != null && invertHandles)
+            {
+                leftDoor.ToggleDoorWing(opened);
+                leftDoor.UpdateNeighbors();
+            }
+            else if (rightDoor != null)
+            {
+                rightDoor.ToggleDoorWing(opened);
+                rightDoor.UpdateNeighbors();
+            }
 
             be.MarkDirty(true);
 
+            UpdateNeighbors();
+        }
+
+        private void UpdateNeighbors()
+        {
             if (Api.Side == EnumAppSide.Server)
             {
                 BlockPos tempPos = new BlockPos();
@@ -276,26 +289,7 @@ namespace Vintagestory.GameContent
                 for (int y = 0; y < doorBh.height; y++)
                 {
                     tempPos.Set(Pos).Add(0, y, 0);
-                    BlockFacing sideMove;
-                    int face = ((int)(RotateYRad / (GameMath.PIHALF - 0.00001F)) % 4 + 4) % 4;
-                    switch (face)
-                    {
-                        case 0:
-                            sideMove = BlockFacing.EAST;
-                            break;
-                        case 1:
-                            sideMove = BlockFacing.NORTH;
-                            break;
-                        case 2:
-                            sideMove = BlockFacing.WEST;
-                            break;
-                        case 3:
-                            sideMove = BlockFacing.SOUTH;
-                            break;
-                        default:
-                            sideMove = BlockFacing.EAST;
-                            break;
-                    }
+                    BlockFacing sideMove = BlockFacing.ALLFACES[Opened ? facingWhenClosed.HorizontalAngleIndex : facingWhenOpened.HorizontalAngleIndex];
                     if (invertHandles) sideMove = sideMove.Opposite;
 
                     for (int x = 0; x < doorBh.width; x++)

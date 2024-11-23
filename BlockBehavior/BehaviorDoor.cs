@@ -179,6 +179,7 @@ namespace Vintagestory.GameContent
                 AssetLocation loc = new AssetLocation("multiblock-monolithic-" + sdx + "-" + sdy + "-" + sdz);
                 Block block = world.GetBlock(loc);
                 world.BlockAccessor.SetBlock(block.Id, mpos);
+                if (world.Side == EnumAppSide.Server) world.BlockAccessor.TriggerNeighbourBlockUpdate(mpos);
                 return true;
             });
         }
@@ -198,6 +199,7 @@ namespace Vintagestory.GameContent
                 if (mblock is BlockMultiblock)
                 {
                     world.BlockAccessor.SetBlock(0, mpos);
+                    if (world.Side == EnumAppSide.Server) world.BlockAccessor.TriggerNeighbourBlockUpdate(mpos);
                 }
 
                 return true;
