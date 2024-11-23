@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
@@ -13,7 +14,7 @@ namespace Vintagestory.GameContent
         TurretMode,
         TurretModeLoad,
         TurretModeHold,
-        TurretModeFire,
+        TurretModeFired,
         TurretModeReload,
         TurretModeUnload,
         Stop
@@ -56,6 +57,10 @@ namespace Vintagestory.GameContent
         EnumTurretState currentState;
         float currentStateTime;
 
+        bool executing = false;
+
+        EntityProjectile prevProjectile;
+
         public AiTaskTurretMode(EntityAgent entity) : base(entity)
         {
         }
@@ -89,6 +94,7 @@ namespace Vintagestory.GameContent
 
         private void AnimManager_OnAnimationStopped(string anim)
         {
+            if (!executing || targetEntity == null) return;
             updateState();
         }
 
@@ -143,6 +149,7 @@ namespace Vintagestory.GameContent
 
             currentState = EnumTurretState.Idle;
             currentStateTime = 0;
+            executing = true;
         }
 
         
@@ -161,6 +168,14 @@ namespace Vintagestory.GameContent
             switch (currentState)
             {
                 case EnumTurretState.Idle:
+                    if (inFiringRange)
+                    {
+                        entity.StartAnimation("load");
+                        currentState = EnumTurretState.TurretMode;
+                        currentStateTime = 0;
+                        return;
+                    }
+
                     if (inSensingRange)
                     {
                         entity.StartAnimation("turret");
@@ -182,9 +197,10 @@ namespace Vintagestory.GameContent
                     if (inFiringRange)
                     {
                         currentState = EnumTurretState.TurretModeLoad;
-                       // System.Diagnostics.Debug.WriteLine("enter turret load mode");
+                        //System.Diagnostics.Debug.WriteLine("enter turret load mode");
                         entity.StopAnimation("turret");
-                        entity.StartAnimation("load");
+                        entity.StartAnimation("load-fromturretpose");
+                        entity.World.PlaySoundAt("sounds/creature/bowtorn/draw", entity, null, false, 32);
                         currentStateTime = 0;
                         return;
                     }
@@ -192,7 +208,7 @@ namespace Vintagestory.GameContent
                     if (currentStateTime > 5)
                     {
                         currentState = EnumTurretState.Stop;
-                       // System.Diagnostics.Debug.WriteLine("enter turret stop mode");
+                        //System.Diagnostics.Debug.WriteLine("enter turret stop mode");
                         entity.StopAnimation("turret");
                     }
                     return;
@@ -202,52 +218,58 @@ namespace Vintagestory.GameContent
 
                     entity.StartAnimation("hold");
                     currentState = EnumTurretState.TurretModeHold;
-                //    System.Diagnostics.Debug.WriteLine("enter turret hold mode");
+                    //System.Diagnostics.Debug.WriteLine("enter turret hold mode");
                     currentStateTime = 0;
                     return;
 
                 case EnumTurretState.TurretModeHold:
-                    if (inFiringRange)
+                    if (inFiringRange || inAbortRange)
                     {
                         if (currentStateTime > 0.5)
                         {
                             fireProjectile();
-                            currentState = EnumTurretState.TurretModeFire;
-                         //   System.Diagnostics.Debug.WriteLine("enter turret fire mode");
+                            currentState = EnumTurretState.TurretModeFired;
+                            //System.Diagnostics.Debug.WriteLine("enter turret fire mode");
+                            
                             entity.StopAnimation("hold");
                             entity.StartAnimation("fire");
                         }
                         return;
                     }
 
-                    if (inAbortRange && currentStateTime >= 1)
-                    {
-                        abort();
-                        return;
-                    }
-
                     if (currentStateTime > 2)
                     {
                         currentState = EnumTurretState.TurretModeUnload;
-                      //  System.Diagnostics.Debug.WriteLine("enter turret unload mode");
+                        //System.Diagnostics.Debug.WriteLine("enter turret unload mode");
+                        
                         entity.StopAnimation("hold");
                         entity.StartAnimation("unload");
                     }
+
                     return;
 
                 case EnumTurretState.TurretModeUnload:
                     if (!isAnimDone("unload")) return;
 
-                  //  System.Diagnostics.Debug.WriteLine("enter turret stop mode");
+                    //System.Diagnostics.Debug.WriteLine("enter turret stop mode");
                     currentState = EnumTurretState.Stop;
                     return;
 
-                case EnumTurretState.TurretModeFire:
+                case EnumTurretState.TurretModeFired:
+                    var range = sensingRange;
+                    if (inAbortRange || !targetEntity.Alive || !targetablePlayerMode((targetEntity as EntityPlayer)?.Player) || !hasDirectContact(targetEntity, range, range / 2f))
+                    {
+                        abort();
+                        return;
+                    }
+
                     if (inSensingRange)
                     {
-                   //     System.Diagnostics.Debug.WriteLine("enter turret reload mode");
+                        //System.Diagnostics.Debug.WriteLine("enter turret reload mode");
+                        
                         currentState = EnumTurretState.TurretModeReload;
                         entity.StartAnimation("reload");
+                        entity.World.PlaySoundAt("sounds/creature/bowtorn/reload", entity, null, false, 32);
                         return;
                     }
 
@@ -262,8 +284,9 @@ namespace Vintagestory.GameContent
                         return;
                     }
 
-                    entity.StartAnimation("turret");
-                 //   System.Diagnostics.Debug.WriteLine("enter turret load mode");
+                    //entity.StartAnimation("turret");
+                    //System.Diagnostics.Debug.WriteLine("enter turret load mode");
+                    entity.World.PlaySoundAt("sounds/creature/bowtorn/draw", entity, null, false, 32);
                     currentState = EnumTurretState.TurretModeLoad;
                     return;
             }
@@ -272,7 +295,7 @@ namespace Vintagestory.GameContent
         private void abort()
         {
             currentState = EnumTurretState.Stop;
-            System.Diagnostics.Debug.WriteLine("stop");
+            //System.Diagnostics.Debug.WriteLine("stop");
             entity.StopAnimation("hold");
             entity.StopAnimation("turret");
 
@@ -286,6 +309,8 @@ namespace Vintagestory.GameContent
             var tstate = entity.AnimManager.GetAnimationState(anim);
             return !tstate.Running || tstate.AnimProgress >= 0.95;
         }
+
+        double overshootAdjustment;
 
         private void fireProjectile()
         {
@@ -320,13 +345,30 @@ namespace Vintagestory.GameContent
             Vec3d pos = entity.ServerPos.XYZ.Add(0, entity.LocalEyePos.Y, 0);
             Vec3d targetPos = targetEntity.ServerPos.XYZ.Add(0, targetEntity.LocalEyePos.Y, 0) + targetEntity.ServerPos.Motion * 8;
 
-            var dist = pos.SquareDistanceTo(targetPos);
-            double distf = Math.Pow(dist, 0.1);
-            Vec3d velocity = (targetPos - pos).Normalize() * GameMath.Clamp(distf - 1f, 0.1f, 1f);
-            velocity.Y += (GameMath.Sqrt(dist) - 10) / 300.0;
+            double dist = pos.DistanceTo(targetPos);
+            double prevVelo = prevProjectile?.ServerPos.Motion.Length() ?? 0;
+            if (prevProjectile != null && !prevProjectile.EntityHit && prevVelo < 0.01)
+            {
+                var impactDistance = pos.DistanceTo(prevProjectile.ServerPos.XYZ);
+                
+                if (dist > impactDistance)
+                {
+                    overshootAdjustment = -(impactDistance - dist) / 4.0;
+                } else
+                {
+                    overshootAdjustment = (dist - impactDistance) / 4.0;
+                }
+            }
 
+            dist += overshootAdjustment;
+
+            double distf = Math.Pow(dist, 0.2);
+            Vec3d velocity = (targetPos - pos).Normalize() * GameMath.Clamp(distf - 1f, 0.1f, 1f);
+            velocity.Y += (dist - 10) / 200.0;
+
+            
             entitypr.ServerPos.SetPosWithDimension(
-                entity.ServerPos.BehindCopy(0.21).XYZ.Add(0, entity.LocalEyePos.Y, 0)
+                entity.ServerPos.XYZ.Add(0, entity.LocalEyePos.Y, 0)
             );
 
             entitypr.ServerPos.Motion.Set(velocity);
@@ -334,6 +376,13 @@ namespace Vintagestory.GameContent
             entitypr.Pos.SetFrom(entitypr.ServerPos);
             entitypr.World = entity.World;
             entity.World.SpawnEntity(entitypr);
+
+            if (prevProjectile == null || prevVelo < 0.01)
+            {
+                prevProjectile = entitypr;
+            }
+
+            entity.World.PlaySoundAt("sounds/creature/bowtorn/release", entity, null, false, 32);
         }
 
         public override bool ContinueExecute(float dt)
@@ -372,6 +421,9 @@ namespace Vintagestory.GameContent
 
             entity.StopAnimation("turret");
             entity.StopAnimation("hold");
+            executing = false;
+            prevProjectile = null;
+
         }
     }
 }

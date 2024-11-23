@@ -51,9 +51,6 @@ namespace Vintagestory.ServerMods
 
             int i = -1;
             int dy, dx, dz;
-            var rainHeightMap = chunks[0].MapChunk.RainHeightMap;
-            var terrainHeightMap = chunks[0].MapChunk.WorldGenTerrainHeightMap;
-
             foreach (uint index in Indices)
             {
                 i++;   // increment i first, because we have various continue statements
@@ -70,9 +67,9 @@ namespace Vintagestory.ServerMods
                 AssetLocation blockCode = BlockCodes[storedBlockid];
 
                 Block newBlock = blockAccessor.GetBlock(blockCode);
-                if (newBlock == null || (replaceMeta && (newBlock == undergroundBlock || newBlock == abovegroundBlock))) continue;
+                if (newBlock == null || (replaceMeta && (newBlock.Id == UndergroundBlockId || newBlock.Id == AbovegroundBlockId))) continue;
 
-                int blockId = replaceMeta && (newBlock == fillerBlock || newBlock == pathwayBlock) ? empty : newBlock.BlockId;
+                int blockId = replaceMeta && IsFillerOrPath(newBlock) ? empty : newBlock.BlockId;
 
                 IChunkBlocks chunkData = chunks[posY / chunksize].Data;
                 int posIndex = ((posY % chunksize) * chunksize + (posZ % chunksize)) * chunksize + (posX % chunksize);
@@ -119,52 +116,15 @@ namespace Vintagestory.ServerMods
                     }
                 }
 
-
-                if (structurePlacement == EnumStructurePlacement.Surface)
+                // surface sits on top of terrain and so needs to blend with existing one better
+                // do not place grass or loose rocks below terrain if there was a solid blocks
+                if (structurePlacement is EnumStructurePlacement.Surface)
                 {
                     var oldBlock = blockAccessor.GetBlock(chunkData[posIndex]);
-                    // this prevents grass from being placed where a solid block was
-                    if(oldBlock.BlockMaterial is EnumBlockMaterial.Soil or EnumBlockMaterial.Sand or EnumBlockMaterial.Stone && newBlock.BlockMaterial == EnumBlockMaterial.Plant) continue;
-
-                    var oldRainPermeable = oldBlock.RainPermeable;
-                    var newRainPermeable = newBlock.RainPermeable;
-                    var posIndexRain = (posZ % chunksize) * chunksize + (posX % chunksize);
-
-                    if (oldRainPermeable && !newRainPermeable)
-                    {
-                        rainHeightMap[posIndexRain] = Math.Max(rainHeightMap[posIndexRain], (ushort)posY);
-                    }
-                    if (!oldRainPermeable && newRainPermeable && rainHeightMap[posIndexRain] == posY)
-                    {
-                        var downY = (ushort)posY;
-                        var posIndexBelow = ((downY % chunksize) * chunksize + (posZ % chunksize)) * chunksize + (posX % chunksize);
-                        while (blockAccessor.GetBlock(chunkData[posIndexBelow]).RainPermeable && downY > 0)
-                        {
-                            downY--;
-                            posIndexBelow = ((downY % chunksize) * chunksize + (posZ % chunksize)) * chunksize + (posX % chunksize);
-                        }
-
-                        rainHeightMap[posIndexRain] = downY;
-                    }
-                    var oldSolid = oldBlock.SideSolid[BlockFacing.UP.Index];
-                    var newSolid = newBlock.SideSolid[BlockFacing.UP.Index];
-
-                    if (!oldSolid && newSolid)
-                    {
-                        terrainHeightMap[posIndexRain] = Math.Max(terrainHeightMap[posIndexRain], (ushort)posY);
-                    }
-                    if (oldSolid && !newSolid && terrainHeightMap[posIndexRain] == posY)
-                    {
-                        var downY = (ushort)(posY - 1);
-                        var posIndexBelow = ((downY % chunksize) * chunksize + (posZ % chunksize)) * chunksize + (posX % chunksize);
-                        while (blockAccessor.GetBlock(chunkData[posIndexBelow]).RainPermeable && downY > 0)
-                        {
-                            downY--;
-                            posIndexBelow = ((downY % chunksize) * chunksize + (posZ % chunksize)) * chunksize + (posX % chunksize);
-                        }
-
-                        terrainHeightMap[posIndexRain] = downY;
-                    }
+                    // if we have solid blocks at the same pos keep the old one to blend in better with the terrain
+                    if((newBlock.Replaceable >= 5500 || newBlock.BlockMaterial == EnumBlockMaterial.Plant) && oldBlock.Replaceable < newBlock.Replaceable && !newBlock.IsLiquid()) continue;
+                    // if a filler block is above a path way to clear grass grow but we are submerged leave the old block here
+                    if(oldBlock.BlockMaterial is EnumBlockMaterial.Soil or EnumBlockMaterial.Stone && newBlock.BlockMaterial == EnumBlockMaterial.Meta) continue;
                 }
 
                 // if we only have a fluid block we need to clear the previous block so we can place fluids
@@ -246,6 +206,11 @@ namespace Vintagestory.ServerMods
             {
                 if (rect.Contains((int)entity.Pos.X, (int)entity.Pos.Z))
                 {
+
+                    if (OriginalPos != null)
+                    {
+                        entity.WatchedAttributes.SetBlockPos("importOffset", startPos - OriginalPos);
+                    }
                     // Not ideal but whatever
                     if (blockAccessor is IWorldGenBlockAccessor)
                     {
@@ -308,6 +273,8 @@ namespace Vintagestory.ServerMods
 
             cloned.ReplaceMode = ReplaceMode;
             cloned.EntranceRotation = EntranceRotation;
+            cloned.OriginalPos = OriginalPos;
+
 
             return cloned;
         }

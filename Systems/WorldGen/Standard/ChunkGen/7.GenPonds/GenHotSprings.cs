@@ -68,7 +68,7 @@ namespace Vintagestory.ServerMods
             var data = request.Chunks[0].MapChunk.GetModdata<Dictionary<Vec3i, HotSpringGenData>>("hotspringlocations");
             if (data == null) return;
 
-            if (SkipGenerationAt(request.ChunkX * chunksize + chunksize / 2, request.ChunkZ * chunksize + chunksize / 2, SkipHotSpringsgHashCode, out _)) return;
+            if (GetIntersectingStructure(request.ChunkX * chunksize + chunksize / 2, request.ChunkZ * chunksize + chunksize / 2, SkipHotSpringsgHashCode) != null) return;
 
             int baseX = request.ChunkX * chunksize;
             int baseZ = request.ChunkZ * chunksize;
@@ -214,8 +214,8 @@ namespace Vintagestory.ServerMods
             {
                 prepareHotSpringBase(posx, posy, posz, surfaceY, true, decorBlock);
 
-                var upblock = wgenBlockAccessor.GetBlock(pos.X, pos.Y + 1, pos.Z);
-                var upblock2 = wgenBlockAccessor.GetBlock(pos.X, pos.Y + 2, pos.Z);
+                var upblock = wgenBlockAccessor.GetBlockAbove(pos);
+                var upblock2 = wgenBlockAccessor.GetBlockAbove(pos, 2);
                 if (upblock2.SideSolid[BlockFacing.UP.Index]) pos.Y += 2;
                 else if (upblock.SideSolid[BlockFacing.UP.Index]) pos.Y++;
 

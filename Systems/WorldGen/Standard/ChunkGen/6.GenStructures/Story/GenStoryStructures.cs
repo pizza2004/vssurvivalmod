@@ -26,7 +26,7 @@ namespace Vintagestory.GameContent
         private ICoreServerAPI api;
 
         private bool genStoryStructures;
-        private BlockLayerConfig blockLayerConfig;
+        public BlockLayerConfig blockLayerConfig;
         private Cuboidi tmpCuboid = new Cuboidi();
 
         private int mapheight;
@@ -54,8 +54,6 @@ namespace Vintagestory.GameContent
 
                 api.Event.WorldgenHook(GenerateHookStructure, "standard", "genHookStructure");
             }
-
-            api.ModLoader.GetModSystem<GenStructures>().OnPreventSchematicPlaceAt += OnPreventSchematicPlaceAt;
 
             api.Event.ServerRunPhase(EnumServerRunPhase.RunGame,() =>
             {
@@ -200,24 +198,11 @@ namespace Vintagestory.GameContent
 
         }
 
-        private bool OnPreventSchematicPlaceAt(BlockPos pos, Cuboidi schematicLocation)
-        {
-            if (structureLocations == null) return false;
-
-            for (int i = 0; i < structureLocations.Length; i++)
-            {
-                if (structureLocations[i].Intersects(schematicLocation)) return true;
-            }
-
-            return false;
-        }
-
-        public bool IsInStoryStructure(int x, int z, int skipCategory, out string locationCode)
+        public string GetStoryStructureCodeAt(int x, int z, int skipCategory)
         {
             if (structureLocations == null)
             {
-                locationCode = null;
-                return false;
+                return null;
             }
 
             foreach (var (_, loc) in storyStructureInstances)
@@ -227,31 +212,28 @@ namespace Vintagestory.GameContent
                 var hasCategory = loc.SkipGenerationFlags.TryGetValue(skipCategory, out var checkRadius);
                 if (loc.Location.Contains(x, z) && hasCategory)
                 {
-                    locationCode = loc.Code;
-                    return true;
+                    return loc.Code;
                 }
                 if (checkRadius > 0)
                 {
                     if (loc.CenterPos.HorDistanceSqTo(x, z) < checkRadius * checkRadius)
                     {
-                        locationCode = loc.Code;
-                        return true;
+                        return loc.Code;
                     }
                 }
             }
 
-            locationCode = null;
-            return false;
+            return null;
         }
 
-        public bool IsInStoryStructure(Vec3d position, int skipCategory, out string locationCode)
+        public string GetStoryStructureCodeAt(Vec3d position, int skipCategory)
         {
-            return IsInStoryStructure((int)position.X, (int)position.Z, skipCategory, out locationCode);
+            return GetStoryStructureCodeAt((int)position.X, (int)position.Z, skipCategory);
         }
 
-        public bool IsInStoryStructure(BlockPos position, int skipCategory, out string locationCode)
+        public string GetStoryStructureCodeAt(BlockPos position, int skipCategory)
         {
-            return IsInStoryStructure(position.X, position.Z, skipCategory, out locationCode);
+            return GetStoryStructureCodeAt(position.X, position.Z, skipCategory);
         }
 
         protected void DetermineStoryStructures()
@@ -491,9 +473,14 @@ namespace Vintagestory.GameContent
 
                     }
                     int blocksPlaced = structure.schematicData.PlacePartial(chunks, worldgenBlockAccessor, api.World, chunkX, chunkZ, startPos, EnumReplaceMode.ReplaceAll, structure.Placement, GenStructures.ReplaceMetaBlocks, GenStructures.ReplaceMetaBlocks,structure.resolvedRockTypeRemaps, structure.replacewithblocklayersBlockids, rockBlock);
-                    if (blocksPlaced > 0 && structure.GenerateGrass)
+                    if (blocksPlaced > 0)
                     {
-                        GenerateGrass(request);
+                        if (structure.Placement is EnumStructurePlacement.Surface or EnumStructurePlacement.SurfaceRuin)
+                        {
+                           UpdateHeightmap(request, worldgenBlockAccessor);
+                        }
+                        if(structure.GenerateGrass)
+                            GenerateGrass(request);
                     }
                     string code = structure.Code + ":" + structure.Schematics[0];
 
@@ -505,7 +492,7 @@ namespace Vintagestory.GameContent
 
                     if (blocksPlaced > 0 && structure.BuildProtected)
                     {
-                        if (!structure.ExcludeSchematic)
+                        if (!structure.ExcludeSchematicSizeProtect)
                         {
                             var claims = api.World.Claims.Get(strucloc.Center.AsBlockPos);
                             if (claims == null || claims.Length == 0)
@@ -562,6 +549,61 @@ namespace Vintagestory.GameContent
                                     });
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        private void UpdateHeightmap(IChunkColumnGenerateRequest request, IWorldGenBlockAccessor worldGenBlockAccessor)
+        {
+            var updatedPositionsT = 0;
+            var updatedPositionsR = 0;
+
+            var rainHeightMap = request.Chunks[0].MapChunk.RainHeightMap;
+            var terrainHeightMap = request.Chunks[0].MapChunk.WorldGenTerrainHeightMap;
+            for (int i = 0; i < rainHeightMap.Length; i++)
+            {
+                rainHeightMap[i] = 0;
+                terrainHeightMap[i] = 0;
+            }
+
+            var mapSizeY = worldgenBlockAccessor.MapSizeY;
+            var mapSize2D = chunksize * chunksize;
+            for (int x = 0; x < chunksize; x++)
+            {
+                for (int z = 0; z < chunksize; z++)
+                {
+                    var mapIndex = z * chunksize + x;
+                    bool rainSet = false;
+                    bool heightSet = false;
+                    for (int posY = mapSizeY - 1; posY >= 0; posY--)
+                    {
+                        var y = posY % chunksize;
+                        var chunk = request.Chunks[posY / chunksize];
+                        var chunkIndex = (y * chunksize + z) * chunksize + x;
+                        var blockId = chunk.Data[chunkIndex];
+                        if (blockId != 0)
+                        {
+                            var newBlock = worldGenBlockAccessor.GetBlock(blockId);
+                            var newRainPermeable = newBlock.RainPermeable;
+                            var newSolid = newBlock.SideSolid[BlockFacing.UP.Index];
+                            if (!newRainPermeable && !rainSet)
+                            {
+                                rainSet = true;
+                                rainHeightMap[mapIndex] = (ushort)posY;
+                                updatedPositionsR++;
+                            }
+
+                            if (newSolid && !heightSet)
+                            {
+                                heightSet = true;
+                                terrainHeightMap[mapIndex] = (ushort)posY;
+                                updatedPositionsT++;
+                            }
+
+                            if (updatedPositionsR >= mapSize2D && updatedPositionsT >= mapSize2D)
+                                return;
                         }
                     }
                 }

@@ -76,7 +76,7 @@ namespace Vintagestory.GameContent
             for (int i = 0; i < 5 + worldGenRand.NextInt(25); i++)
             {
                 if (pos.Y < 15) continue; // Too hot for stalactites
-                if (modSys != null && modSys.SkipGenerationAt(pos, ModStdWorldGen.SkipStalagHashCode, out _)) continue;
+                if (modSys != null && modSys.GetIntersectingStructure(pos, ModStdWorldGen.SkipStalagHashCode) != null) continue;
 
                 didplace |= TryGenStalag(blockAccessor, pos, worldGenRand.NextInt(4), worldGenRand);
                 pos.X += worldGenRand.NextInt(9) - 4;
@@ -93,7 +93,7 @@ namespace Vintagestory.GameContent
 
             for (int dy = 0; dy < 5; dy++)
             {
-                Block block = blockAccessor.GetBlock(pos.X, pos.Y + dy, pos.Z);
+                Block block = blockAccessor.GetBlockAbove(pos, dy);
                 if (block.SideSolid[BlockFacing.DOWN.Index] && block.BlockMaterial == EnumBlockMaterial.Stone)
                 {
                     string rocktype;
@@ -111,7 +111,7 @@ namespace Vintagestory.GameContent
 
             for (int dy = 0; dy < 12; dy++)
             {
-                Block block = blockAccessor.GetBlock(pos.X, pos.Y - dy, pos.Z);
+                Block block = blockAccessor.GetBlockBelow(pos, dy);
                 if (block.SideSolid[BlockFacing.UP.Index] && block.BlockMaterial == EnumBlockMaterial.Stone)
                 {
                     string rocktype;

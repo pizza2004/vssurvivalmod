@@ -26,6 +26,8 @@ namespace Vintagestory.GameContent
         public float DropOnImpactChance = 0f;
         public bool DamageStackOnImpact = false;
 
+        public bool EntityHit { get; protected set; }
+
         public bool NonCollectible
         {
             get { return Attributes.GetBool("nonCollectible"); }
@@ -73,9 +75,7 @@ namespace Vintagestory.GameContent
             if (World.ElapsedMilliseconds <= msCollide + 500) return;
 
             var pos = SidedPos;
-
-            if (pos.Motion.X == 0 && pos.Motion.Y == 0 && pos.Motion.Z == 0) return;  // Don't do damage if stuck in ground
-
+            if (pos.Motion.LengthSq() < 0.2*0.2) return;  // Don't do damage if stuck in ground
 
             Cuboidd projectileBox = SelectionBox.ToDouble().Translate(pos.X, pos.Y, pos.Z);
 
@@ -223,6 +223,8 @@ namespace Vintagestory.GameContent
         {
             if (!Alive) return;
 
+            EntityHit = true;
+
             EntityPos pos = SidedPos;
 
             IServerPlayer fromPlayer = null;
@@ -243,8 +245,6 @@ namespace Vintagestory.GameContent
             }
 
             msCollide = World.ElapsedMilliseconds;
-
-            pos.Motion.Set(0, 0, 0);
 
             if (canDamage && World.Side == EnumAppSide.Server)
             {
@@ -285,6 +285,8 @@ namespace Vintagestory.GameContent
                     World.PlaySoundFor(new AssetLocation("sounds/player/projectilehit"), (FiredBy as EntityPlayer).Player, false, 24);
                 }
             }
+
+            pos.Motion.Set(0, 0, 0);
         }
 
         public virtual void SetInitialRotation()

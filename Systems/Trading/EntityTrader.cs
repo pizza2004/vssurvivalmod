@@ -36,7 +36,7 @@ namespace Vintagestory.GameContent
         public InventoryTrader Inventory;
         public TradeProperties TradeProps;
 
-        
+
         public EntityPlayer tradingWithPlayer;
         GuiDialog dlg;
 
@@ -66,7 +66,7 @@ namespace Vintagestory.GameContent
             var bh = GetBehavior<EntityBehaviorConversable>();
             if (bh != null)
             {
-                bh.onControllerCreated += (controller) =>
+                bh.OnControllerCreated += (controller) =>
                 {
                     controller.DialogTriggers += Dialog_DialogTriggers;
                 };
@@ -92,12 +92,12 @@ namespace Vintagestory.GameContent
                     api.World.Logger.VerboseDebug("{0}", Properties.Server.Attributes["tradeProps"].ToJsonToken());
                 }
 
-                
+
             } else
             {
                 talkUtil = new EntityTalkUtil(api as ICoreClientAPI, this, false);
             }
-            
+
             try
             {
                 Inventory.LateInitialize("traderInv-" + EntityId, api, this);
@@ -155,9 +155,7 @@ namespace Vintagestory.GameContent
         void setupTaskBlocker()
         {
             EntityBehaviorTaskAI taskAi = GetBehavior<EntityBehaviorTaskAI>();
-
-            taskAi.TaskManager.OnShouldExecuteTask +=
-               (task) => (ConversableBh == null || ConversableBh.ControllerByPlayer.Count == 0 || (task is AiTaskIdle || task is AiTaskSeekEntity || task is AiTaskGotoEntity)) && tradingWithPlayer == null;
+            taskAi.TaskManager.OnShouldExecuteTask += (task) => tradingWithPlayer == null;
         }
 
         private void RefreshBuyingSellingInventory(float refreshChance = 1.1f)
@@ -193,7 +191,7 @@ namespace Vintagestory.GameContent
 
                 TradeItem item = TradeProps.Selling.List[i];
                 if (!item.Resolve(World, "tradeItem resolver")) continue;
-                
+
                 bool alreadySelling = sellingSlots.Any((slot) => slot?.Itemstack != null && slot.TradeItem.Stock > 0 && item.ResolvedItemstack?.Equals(World, slot.Itemstack, ignoredAttributes) == true);
 
                 if (!alreadySelling)
@@ -275,11 +273,6 @@ namespace Vintagestory.GameContent
 
         public override void OnInteract(EntityAgent byEntity, ItemSlot slot, Vec3d hitPosition, EnumInteractMode mode)
         {
-            if (ConversableBh != null)
-            {
-                ConversableBh.GetOrCreateController(byEntity as EntityPlayer);
-            }
-
             base.OnInteract(byEntity, slot, hitPosition, mode);
         }
 
@@ -448,7 +441,7 @@ namespace Vintagestory.GameContent
                 if (tradingPlayer != null) Inventory.Close(tradingPlayer);
             }
         }
-        
+
 
         public override void FromBytes(BinaryReader reader, bool forClient)
         {
@@ -518,7 +511,7 @@ namespace Vintagestory.GameContent
             base.PlayEntitySound(type, dualCallByPlayer, randomizePitch, range);
         }
 
-        
+
 
     }
 

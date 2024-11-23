@@ -1,20 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Numerics;
-using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Xml.Linq;
-using ProperVersion;
 using ProtoBuf;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
-using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
 using Vintagestory.API.Util;
+using Vintagestory.ServerMods;
 
 namespace Vintagestory.GameContent
 {
@@ -47,8 +41,7 @@ namespace Vintagestory.GameContent
         [ProtoMember(6)]
         public int size = 3;
 
-        public TimeSwitchState()   // Parameter-less constructor used by NetworkChannel
-        { }
+        public TimeSwitchState() { }  // Parameter-less constructor used by NetworkChannel
 
         public TimeSwitchState(string uid)
         {
@@ -56,6 +49,44 @@ namespace Vintagestory.GameContent
         }
     }
 
+
+    public class ItemSkillTimeswitch : Item, ISkillItemRenderer
+    {
+        LoadedTexture iconTex;
+        ICoreClientAPI capi;
+
+        public override void OnHeldInteractStart(ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
+        {
+            if (api is ICoreClientAPI capi)
+            {
+                capi.SendChatMessage(string.Format("/timeswitch toggle"));
+                
+            }
+        }
+
+        public override void OnLoaded(ICoreAPI api)
+        {
+            if (api.Side != EnumAppSide.Client) return;
+
+            capi = api as ICoreClientAPI;
+
+            if (Attributes?["iconPath"].Exists == true)
+            {
+                var iconloc = AssetLocation.Create(Attributes["iconPath"].ToString(), Code.Domain).WithPathPrefix("textures/");
+                iconTex = ObjectCacheUtil.GetOrCreate(api, "skillicon-" + Code, () =>
+                {
+                    return capi.Gui.LoadSvgWithPadding(iconloc, 64, 64, 5, ColorUtil.WhiteArgb);
+                });
+            }
+
+            base.OnLoaded(api);
+        }
+
+        public void Render(float dt, float x, float y, float z)
+        {
+            capi.Render.Render2DLoadedTexture(iconTex, x, y, z);
+        }
+    }
 
 
     /// <summary>
@@ -141,9 +172,13 @@ namespace Vintagestory.GameContent
         {
             if (!posEnabled) return;
 
+            var skillStack = new ItemStack(sapi.World.GetItem("timeswitch"));
+
             foreach (IServerPlayer player in sapi.World.AllOnlinePlayers)
             {
                 if (player.ConnectionState != EnumClientState.Playing) continue;
+
+                var skillSlot = player.InventoryManager.GetHotbarInventory()[10];
 
                 if (WithinRange(player.Entity.ServerPos, deactivateRadius - 1))
                 {
@@ -154,6 +189,12 @@ namespace Vintagestory.GameContent
                         timeswitchStatesByPlayerUid[player.PlayerUID] = state;
                     }
 
+                    if (skillSlot.Empty)
+                    {
+                        skillSlot.Itemstack = skillStack;
+                        skillSlot.MarkDirty();
+                    }
+
                     if (!state.Enabled)
                     {
                         state.Enabled = true;
@@ -162,10 +203,19 @@ namespace Vintagestory.GameContent
                         player.SendMessage(GlobalConstants.GeneralChatGroup, "You can press Y to activate the timeswitch", EnumChatType.Notification);
                     }
                 }
-                else if (player.Entity.ServerPos.Dimension == OtherDimension && !WithinRange(player.Entity.ServerPos, deactivateRadius))
+                else if (!WithinRange(player.Entity.ServerPos, deactivateRadius))
                 {
-                    // Boot the player from the other dimension if has moved beyond deactivateRadius
-                    ActivateTimeswitchServer(player);
+                    if (!skillSlot.Empty)
+                    {
+                        skillSlot.Itemstack = null;
+                        skillSlot.MarkDirty();
+                    }
+
+                    if (player.Entity.ServerPos.Dimension == OtherDimension)
+                    {
+                        // Boot the player from the other dimension if has moved beyond deactivateRadius
+                        ActivateTimeswitchServer(player);
+                    }
                 }
             }
         }
@@ -339,13 +389,15 @@ namespace Vintagestory.GameContent
         }
 
 
-        public void CopyBlocksToAltDimension(IServerPlayer player)
+        public void CopyBlocksToAltDimension(IBlockAccessor sourceblockAccess, IServerPlayer player)
         {
             if (!loreEnabled || !posEnabled) return;
 
             BlockPos start = new BlockPos((baseChunkX - size + 1) * GlobalConstants.ChunkSize, 0, (baseChunkZ - size + 1) * GlobalConstants.ChunkSize);
-            BlockPos end = start.AddCopy(GlobalConstants.ChunkSize * (size * 2 - 1), sapi.WorldManager.MapSizeY, GlobalConstants.ChunkSize * (size * 2 - 1));
-            BlockSchematic blocks = new BlockSchematic(sapi.World, start, end, false);
+            BlockPos end = start.AddCopy(GlobalConstants.ChunkSize * (size * 2 - 1), 0, GlobalConstants.ChunkSize * (size * 2 - 1));
+            start.Y = Math.Max(0, (sapi.World.SeaLevel - 8) / GlobalConstants.ChunkSize * GlobalConstants.ChunkSize);
+            end.Y = Math.Min(sapi.WorldManager.MapSizeY, ((sapi.World.SeaLevel + 8) / GlobalConstants.ChunkSize + 2) * GlobalConstants.ChunkSize);
+            BlockSchematic blocks = new BlockSchematic(sapi.World, sourceblockAccess, start, end, false);
 
             CreateChunkColumns();
 
@@ -355,22 +407,25 @@ namespace Vintagestory.GameContent
             blocks.Place(blockAccess, sapi.World, originPos, EnumReplaceMode.ReplaceAll, true);
             blocks.PlaceDecors(blockAccess, originPos);
 
-            start.dimension = OtherDimension;
-            end.dimension = OtherDimension;
-            sapi.WorldManager.FullRelight(start, end, false);
+            if (player != null)
+            {
+                start.dimension = OtherDimension;
+                end.dimension = OtherDimension;
+                sapi.WorldManager.FullRelight(start, end, false);
 
-            if (player != null) ForceSendChunkColumns(player);
+                ForceSendChunkColumns(player);
+            }
         }
 
 
         private void CreateChunkColumns()
         {
-            for (int x = 0; x < size * 2 - 1; x++)
+            for (int x = 0; x <= size * 2; x++)
             {
-                for (int z = 0; z < size * 2 - 1; z++)
+                for (int z = 0; z <= size * 2; z++)
                 {
-                    int cx = baseChunkX - size + 1 + x;
-                    int cz = baseChunkZ - size + 1 + z;
+                    int cx = baseChunkX - size + x;
+                    int cz = baseChunkZ - size + z;
 
                     sapi.WorldManager.CreateChunkColumnForDimension(cx, cz, OtherDimension);
                 }
@@ -393,7 +448,6 @@ namespace Vintagestory.GameContent
                     int cz = baseChunkZ - size + 1 + z;
 
                     // Ultimately we may need to add a test here to detect whether the chunk columns in the alt dimension are already loaded, otherwise there can be duplication in a multiplayer game
-
                     sapi.WorldManager.LoadChunkColumnForDimension(cx, cz, OtherDimension);
                 }
             }
@@ -434,6 +488,98 @@ namespace Vintagestory.GameContent
             }
         }
 
+        StoryStructureLocation genStoryStructLoc;
+        GenStoryStructures genGenStoryStructures;
+        Action<int,int,int> onGenDevastationLayer;
+        /// <summary>
+        /// Called to set up the devastationLocation 
+        /// </summary>
+        /// <param name="structureLocation"></param>
+        /// <param name="genStoryStructures"></param>
+        public void InitPotentialGeneration(StoryStructureLocation structureLocation, GenStoryStructures genStoryStructures, Action<int, int, int> genDevastationLayer)
+        {
+            genStoryStructLoc = structureLocation;
+            genGenStoryStructures = genStoryStructures;
+            onGenDevastationLayer = genDevastationLayer;
+        }
 
+        public void AttemptGeneration(IWorldGenBlockAccessor worldgenBlockAccessor)
+        {
+            if (genStoryStructLoc == null || genStoryStructLoc.DidGenerateAdditional) return;
+
+            if (!AreAllDim0ChunksGenerated()) return;
+
+            genStoryStructLoc.DidGenerateAdditional = true;
+            genGenStoryStructures.StoryStructureInstancesDirty = true;
+
+            CreateChunkColumns();
+            onGenDevastationLayer(baseChunkX, baseChunkZ, size);
+
+            PlaceSchematic(sapi.World.BlockAccessor, OtherDimension, "story/" + genStoryStructLoc.Code + "-past", genStoryStructLoc.CenterPos.Copy());
+
+            if (size > 0)
+            {
+                BlockPos start = new BlockPos((baseChunkX - size) * GlobalConstants.ChunkSize, 0, (baseChunkZ - size) * GlobalConstants.ChunkSize, OtherDimension);
+                BlockPos end = start.AddCopy(GlobalConstants.ChunkSize * (size * 2 + 1) - 1, sapi.WorldManager.MapSizeY, GlobalConstants.ChunkSize * (size * 2 + 1) - 1);
+                start.Y = (sapi.World.SeaLevel - 8) / GlobalConstants.ChunkSize * GlobalConstants.ChunkSize;
+                sapi.WorldManager.FullRelight(start, end, false);
+            }
+
+            // Send updates of the newly generated chunks to all players in range, otherwise they may have old copies
+            foreach (IServerPlayer player in sapi.World.AllOnlinePlayers)
+            {
+                if (player.ConnectionState != EnumClientState.Playing) continue;
+
+                if (WithinRange(player.Entity.ServerPos, deactivateRadius + 2))
+                {
+                    ForceSendChunkColumns(player);
+                }
+            }
+        }
+
+        private void PlaceSchematic(IBlockAccessor blockAccessor, int dim, string genSchematicName, BlockPos start)
+        {
+            BlockSchematicPartial blocks = LoadSchematic(sapi, genSchematicName);
+            if (blocks == null) return;
+
+            blocks.Init(blockAccessor);
+            blocks.blockLayerConfig = genGenStoryStructures.blockLayerConfig;
+
+            start.Add(-blocks.SizeX / 2, dim * BlockPos.DimensionBoundary, -blocks.SizeZ / 2);
+
+            blocks.Place(blockAccessor, sapi.World, start, EnumReplaceMode.Replaceable, true);
+            blocks.PlaceDecors(blockAccessor, start);
+        }
+
+        private bool AreAllDim0ChunksGenerated()
+        {
+            for (int cx = baseChunkX - size + 1; cx < baseChunkX + size; cx++)
+            {
+                for (int cz = baseChunkZ - size + 1; cz < baseChunkZ + size; cz++)
+                {
+                    IMapChunk mc = sapi.World.BlockAccessor.GetMapChunk(cx, cz);
+                    if (mc == null) return false;
+                    if (mc.CurrentPass <= EnumWorldGenPass.Vegetation) return false;
+                }
+            }
+
+            return true;
+        }
+
+        private BlockSchematicPartial LoadSchematic(ICoreServerAPI sapi, string schematicName)
+        {
+            IAsset asset = sapi.Assets.Get(new AssetLocation("worldgen/schematics/" + schematicName + ".json"));
+            if (asset == null) return null;
+
+            BlockSchematicPartial schematic = asset.ToObject<BlockSchematicPartial>();
+            if (schematic == null)
+            {
+                sapi.World.Logger.Warning("Could not load timeswitching schematic {0}", schematicName);
+                return null;
+            }
+
+            schematic.FromFileName = asset.Name;
+            return schematic;
+        }
     }
 }

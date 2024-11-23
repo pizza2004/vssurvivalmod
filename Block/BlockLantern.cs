@@ -15,7 +15,7 @@ namespace Vintagestory.GameContent
     {
         IAttachableToEntity attrAtta;
         #region IAttachableToEntity
-        string IAttachableToEntity.GetCategoryCode(ItemStack stack) => attrAtta.GetCategoryCode(stack);
+        string IAttachableToEntity.GetCategoryCode(ItemStack stack) => attrAtta?.GetCategoryCode(stack);
         CompositeShape IAttachableToEntity.GetAttachedShape(ItemStack stack, string slotCode) => attrAtta.GetAttachedShape(stack, slotCode);
         string[] IAttachableToEntity.GetDisableElements(ItemStack stack) => attrAtta.GetDisableElements(stack);
         string[] IAttachableToEntity.GetKeepElements(ItemStack stack) => attrAtta.GetKeepElements(stack);
@@ -379,6 +379,6 @@ namespace Vintagestory.GameContent
             return stacks;
         }
 
-        public bool IsAttachable(ItemStack itemStack) => true;
+        public bool IsAttachable(Entity toEntity, ItemStack itemStack) => true;
     }
 }

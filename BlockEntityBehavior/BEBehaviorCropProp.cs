@@ -20,6 +20,21 @@ namespace Vintagestory.GameContent
             base.OnLoaded(api);
             this.capi = api as ICoreClientAPI;
         }
+
+        public override void OnUnloaded(ICoreAPI api)
+        {
+            var meshRefs = ObjectCacheUtil.TryGet<Dictionary<string, MultiTextureMeshRef>>(api, "croprop-meshes");
+            if (meshRefs?.Count > 0)
+            {
+                foreach (var (_, meshRef) in meshRefs)
+                {
+                    meshRef.Dispose();
+                }
+                ObjectCacheUtil.Delete(api, "croprop-meshes");
+            }
+            base.OnUnloaded(api);
+        }
+
         public Size2i AtlasSize => capi.BlockTextureAtlas.Size;
 
         string nowTesselatingType;
@@ -131,11 +146,13 @@ namespace Vintagestory.GameContent
                     loadConfig();
                     loadMesh();
                 }
-            }            
+            }
         }
 
         private void loadConfig()
         {
+            if (Type == null) return;
+
             config = this.Block.Attributes["types"][dead ? "dead" : Type].AsObject<CropPropConfig>();
 
             if (config.Shape != null)
@@ -174,10 +191,11 @@ namespace Vintagestory.GameContent
             cropBlock = Api.World.GetBlock(new AssetLocation("crop-" + Type + "-" + Stage));
 
             if (cshape == null)
-            {   
+            {
                 if (cropBlock.Shape.Alternates == null)
                 {
-                    mesh = capi.TesselatorManager.GetDefaultBlockMesh(cropBlock);
+                    mesh = capi.TesselatorManager.GetDefaultBlockMesh(cropBlock).Clone();
+                    mesh.Translate(0, -1 / 16f, 0);
                     return;
                 }
 
@@ -201,6 +219,7 @@ namespace Vintagestory.GameContent
 
         private void onTick8s(float dt)
         {
+            if (config == null) return;
             var mon = Api.World.Calendar.YearRel;
             var len = (config.MonthEnd - config.MonthStart) / 12f;
             int nextStage = GameMath.Clamp((int)((mon - (config.MonthStart-1)/12f)/len * config.Stages), 1, config.Stages);
@@ -250,7 +269,7 @@ namespace Vintagestory.GameContent
         public override bool OnTesselation(ITerrainMeshPool mesher, ITesselatorAPI tessThreadTesselator)
         {
             float[] matrix = cropBlock?.RandomizeRotations==true ? TesselationMetaData.randomRotMatrices[GameMath.MurmurHash3Mod(-Pos.X, cropBlock.RandomizeAxes == EnumRandomizeAxes.XYZ ? Pos.Y : 0, Pos.Z, TesselationMetaData.randomRotations.Length)] : null;
-            
+
             mesher.AddMeshData(mesh, matrix);
             return true;
         }

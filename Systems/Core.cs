@@ -392,6 +392,7 @@ namespace Vintagestory.GameContent
             api.RegisterBlockClass("BlockBed", typeof(BlockBed));
             api.RegisterBlockClass("BlockBerryBush", typeof(BlockBerryBush));
             api.RegisterBlockClass("BlockWaterLily", typeof(BlockWaterLily));
+            api.RegisterBlockClass("BlockWaterLilyGiant", typeof(BlockWaterLilyGiant));
             api.RegisterBlockClass("BlockLooseStones", typeof(BlockLooseStones));
             api.RegisterBlockClass("BlockIngotPile", typeof(BlockIngotPile));
             api.RegisterBlockClass("BlockPeatPile", typeof(BlockPeatPile));
@@ -650,7 +651,7 @@ namespace Vintagestory.GameContent
             api.RegisterBlockBehaviorClass("JonasGasifier", typeof(BlockBehaviorJonasGasifier));
             api.RegisterBlockBehaviorClass("UnstableRock", typeof(BlockBehaviorUnstableRock));
             api.RegisterBlockBehaviorClass("CreatureContainer", typeof(BlockBehaviorCreatureContainer));
-
+            api.RegisterBlockBehaviorClass("Chimney", typeof(BlockBehaviorChimney));
         }
 
         private void RegisterDefaultBlockEntityBehaviors()
@@ -698,6 +699,8 @@ namespace Vintagestory.GameContent
             api.RegisterCollectibleBehaviorClass("ArtPigment", typeof(CollectibleBehaviorArtPigment));
             api.RegisterCollectibleBehaviorClass("BoatableGenericTypedContainer", typeof(CollectibleBehaviorBoatableGenericTypedContainer));
             api.RegisterCollectibleBehaviorClass("BoatableCrate", typeof(CollectibleBehaviorBoatableCrate));
+            api.RegisterCollectibleBehaviorClass("EntityDeconstructTool", typeof(EntityDeconstructTool));
+
         }
 
 
@@ -917,6 +920,8 @@ namespace Vintagestory.GameContent
             api.RegisterItemClass("ItemTongs", typeof(ItemTongs));
             api.RegisterItemClass("ItemFlute", typeof(ItemFlute));
             api.RegisterItemClass("ItemMedallion", typeof(ItemMedallion));
+
+            api.RegisterItemClass("ItemSkillTimeswitch", typeof(ItemSkillTimeswitch));
         }
 
 
