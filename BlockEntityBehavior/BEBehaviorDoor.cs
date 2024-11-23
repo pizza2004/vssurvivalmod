@@ -226,11 +226,8 @@ namespace Vintagestory.GameContent
         }
 
         public bool IsSideSolid(BlockFacing facing)
-        { 
-            if (!opened && facing == facingWhenClosed) return true;
-            else if (opened && facing == facingWhenOpened) return true;
-            
-            return false;
+        {
+            return (!opened && facing == facingWhenClosed) || (opened && facing == facingWhenOpened);
         }
 
         public bool OnBlockInteractStart(IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel, ref EnumHandling handling)

@@ -24,6 +24,14 @@ namespace Vintagestory.GameContent
             return BlockFacing.FromCode(Variant["horizontalorientation"]);
         }
 
+        public bool IsSideSolid(BlockFacing facing)
+        {
+            BlockFacing facingWhenClosed = GetDirection().Opposite;
+            BlockFacing facingWhenOpened = GetKnobOrientation() == "left" ? facingWhenClosed.GetCCW() : facingWhenClosed.GetCW();
+
+            return (!open && facingWhenClosed == facing) || (open && facingWhenOpened == facing);
+        }
+
         public string GetKnobOrientation(Block block)
         {
             return Variant["knobOrientation"];
@@ -186,13 +194,14 @@ namespace Vintagestory.GameContent
         public override int GetRetention(BlockPos pos, BlockFacing facing, EnumRetentionType type)
         {
             if (!airtight) return 0;
-            return open ? 3 : 1;
+            if (type == EnumRetentionType.Sound) return IsSideSolid(facing) ? 3 : 0;
+
+            return (IsSideSolid(facing) || IsSideSolid(facing.Opposite)) ? 1 : 3;
         }
 
         public override float GetLiquidBarrierHeightOnSide(BlockFacing face, BlockPos pos)
         {
-            if (open) return 0f;
-            if (face != GetDirection().Opposite) return 0f;
+            if (!IsSideSolid(face)) return 0f;
 
             if (!airtight) return 0f;
 
