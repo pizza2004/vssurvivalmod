@@ -290,7 +290,6 @@ namespace Vintagestory.GameContent
                 {
                     tempPos.Set(Pos).Add(0, y, 0);
                     BlockFacing sideMove = BlockFacing.ALLFACES[Opened ? facingWhenClosed.HorizontalAngleIndex : facingWhenOpened.HorizontalAngleIndex];
-                    if (invertHandles) sideMove = sideMove.Opposite;
 
                     for (int x = 0; x < doorBh.width; x++)
                     {
