@@ -1,5 +1,6 @@
 ﻿using ProtoBuf;
 using System;
+using System.Collections.Generic;
 using System.Text;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
@@ -97,6 +98,7 @@ namespace Vintagestory.GameContent
         double squeezedLitresLeft;
         double pressSqueezeRel;
         bool squeezeSoundPlayed;
+        int dryStackSize = 0;
 
         public ItemSlot MashSlot => inv[0];
         public ItemSlot BucketSlot => inv[1];
@@ -118,7 +120,7 @@ namespace Vintagestory.GameContent
         {
             get
             {
-                return mashStack?.Attributes?.GetDouble("juiceableLitresTransfered") ?? 0f;
+                return mashStack?.Attributes?.GetDouble("juiceableLitresTransfered") ?? 0;
             }
             set
             {
@@ -387,6 +389,7 @@ namespace Vintagestory.GameContent
                     if (hprops.LitresPerItem == null)
                     {
                         mashStack.StackSize = 1;
+                        dryStackSize = (int)(GameMath.RoundRandom(Api.World.Rand, (float)juiceableLitresLeft + (float)juiceableLitresTransfered) * getJuiceableProps(mashStack).PressedDryRatio);
                         handslot.TakeOut(1);
                         MarkDirty(true);
                         renderer?.reloadMeshes(hprops, true);
@@ -419,6 +422,23 @@ namespace Vintagestory.GameContent
                         return false;
                     }
 
+
+                    TransitionState[] sourceTransitionStates = handStack.Collectible.UpdateAndGetTransitionStates(Api.World, handslot);
+                    TransitionState[] targetTransitionStates = mashStack.Collectible.UpdateAndGetTransitionStates(Api.World, MashSlot);
+
+                    Dictionary<EnumTransitionType, TransitionState> targetStatesByType = null;
+
+                    targetStatesByType = new Dictionary<EnumTransitionType, TransitionState>();
+                    foreach (var state in targetTransitionStates) targetStatesByType[state.Props.Type] = state;
+
+                    float t = (transferableLitres + usedLitres) / (transferableLitres + usedLitres + (float)juiceableLitresLeft + (float)juiceableLitresTransfered);
+
+                    foreach (var sourceState in sourceTransitionStates)
+                    {
+                        TransitionState targetState = targetStatesByType[sourceState.Props.Type];
+                        mashStack.Collectible.SetTransitionState(mashStack, sourceState.Props.Type, sourceState.TransitionedHours * t + targetState.TransitionedHours * (1 - t));
+                    }
+
                     removeItems = handStack.Attributes.HasAttribute("juiceableLitresLeft") ? 1 : 0;
                 } else
                 {
@@ -447,6 +467,7 @@ namespace Vintagestory.GameContent
                     mashStack.Attributes.SetDouble("juiceableLitresLeft", juiceableLitresLeft += transferableLitres);
                     mashStack.Attributes.SetDouble("juiceableLitresTransfered", juiceableLitresTransfered += usedLitres);
                     mashStack.StackSize = 1;
+                    dryStackSize = (int)(GameMath.RoundRandom(Api.World.Rand, (float)juiceableLitresLeft + (float)juiceableLitresTransfered) * getJuiceableProps(mashStack).PressedDryRatio);
                     handslot.MarkDirty();
                     MarkDirty(true);
                     renderer?.reloadMeshes(hprops, true);
@@ -569,12 +590,11 @@ namespace Vintagestory.GameContent
         {
             if (juiceableLitresLeft < 0.01 && mashStack.Collectible.Code.Path != "rot")
             {
-                var juiceProps = getJuiceableProps(mashStack);
-                int stacksize = GameMath.RoundRandom(Api.World.Rand, (float)juiceableLitresTransfered);
                 mashStack.Attributes.RemoveAttribute("juiceableLitresTransfered");
                 mashStack.Attributes.RemoveAttribute("juiceableLitresLeft");
                 mashStack.Attributes.RemoveAttribute("squeezeRel");
-                mashStack.StackSize = (int)(stacksize * juiceProps.PressedDryRatio);
+                mashStack.StackSize = dryStackSize;
+                dryStackSize = 0;
             }
         }
 
@@ -729,7 +749,7 @@ namespace Vintagestory.GameContent
 
             if (!MashSlot.Empty)
             {
-                int stacksize = mashStack.Collectible.Code.Path != "rot" ? GameMath.RoundRandom(Api.World.Rand, (float)juiceableLitresTransfered) : MashSlot.StackSize;
+                int stacksize = mashStack.Collectible.Code.Path != "rot" ? dryStackSize : MashSlot.StackSize;
 
                 if (juiceableLitresLeft > 0)
                 {
