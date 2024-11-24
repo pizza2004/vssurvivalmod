@@ -1,6 +1,7 @@
 ﻿using System;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
+using Vintagestory.API.MathTools;
 
 namespace Vintagestory.GameContent
 {
@@ -17,20 +18,10 @@ namespace Vintagestory.GameContent
 
         public override ItemStack OnTransitionNow(ItemSlot slot, TransitionableProperties props)
         {
-            if (props.Type == EnumTransitionType.Perish)
-            {
-                float pressedDryRatio = slot.Itemstack.ItemAttributes["juiceableProperties"]["pressedDryRatio"].AsFloat(1);
-                double juiceableLitresTotal = slot.Itemstack.Attributes.GetDouble("juiceableLitresLeft") + slot.Itemstack.Attributes.GetDouble("juiceableLitresTransfered");
+            float pressedDryRatio = slot.Itemstack.ItemAttributes["juiceableProperties"]["pressedDryRatio"].AsFloat(1);
+            double juiceableLitresTotal = slot.Itemstack.Attributes.GetDouble("juiceableLitresLeft") + slot.Itemstack.Attributes.GetDouble("juiceableLitresTransfered");
 
-                if (juiceableLitresTotal > 0)
-                {
-                    int stacksize = GameMath.RoundRandom(api.World.Rand, (float)juiceableLitresTotal);
-                    slot.Itemstack.Attributes.RemoveAttribute("juiceableLitresTransfered");
-                    slot.Itemstack.Attributes.RemoveAttribute("juiceableLitresLeft");
-                    slot.Itemstack.Attributes.RemoveAttribute("squeezeRel");
-                    props.TransitionRatio *= (int)(stacksize * pressedDryRatio);
-                }
-            }
+            if (juiceableLitresTotal > 0) props.TransitionRatio = (int)(GameMath.RoundRandom(api.World.Rand, (float)juiceableLitresTotal) * pressedDryRatio);
 
             return base.OnTransitionNow(slot, props);
         }
