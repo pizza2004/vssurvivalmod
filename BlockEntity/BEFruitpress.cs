@@ -253,7 +253,7 @@ namespace Vintagestory.GameContent
 
             // Since the sound only plays once when the screw touches the mash we can reuse the variable here to make
             // sure this runs as long as there is still juice left to drip out, even if the player releases the screw
-            if (Api.Side == EnumAppSide.Server && squeezedLitresLeft > 0 && squeezeSoundPlayed)
+            if (Api.Side == EnumAppSide.Server && squeezedLitresLeft > 0 && squeezedJuiceLeft)
             {
                 ItemStack liquidStack = juiceProps.LiquidStack.ResolvedItemstack;
                 liquidStack.StackSize = 999999;
@@ -675,6 +675,7 @@ namespace Vintagestory.GameContent
 
                 if (packet.AnimationActive)
                 {
+                    if (!CompressAnimActive) squeezeSoundPlayed = false;
                     animUtil.StartAnimation(compressAnimMeta);
                     if (listenerId == 0) listenerId = RegisterGameTickListener(onTick25msClient, 25);
                 }
@@ -727,6 +728,10 @@ namespace Vintagestory.GameContent
             ItemStack beforeStack = mashStack;
 
             base.FromTreeAttributes(tree, worldForResolving);
+            squeezedLitresLeft = tree.GetFloat("squeezedLitresLeft");
+            squeezeSoundPlayed = tree.GetBool("squeezeSoundPlayed");
+            squeezedJuiceLeft = tree.GetBool("squeezedJuiceLeft");
+            dryStackSize = tree.GetInt("dryStackSize");
 
             if (worldForResolving.Side == EnumAppSide.Client)
             {
@@ -743,6 +748,10 @@ namespace Vintagestory.GameContent
         public override void ToTreeAttributes(ITreeAttribute tree)
         {
             base.ToTreeAttributes(tree);
+            tree.SetDouble("squeezedLitresLeft", squeezedLitresLeft);
+            tree.SetBool("squeezeSoundPlayed", squeezeSoundPlayed);
+            tree.SetBool("squeezedJuiceLeft", squeezedJuiceLeft);
+            tree.SetInt("dryStackSize", dryStackSize);
         }
 
         public override bool OnTesselation(ITerrainMeshPool mesher, ITesselatorAPI tessThreadTesselator)
