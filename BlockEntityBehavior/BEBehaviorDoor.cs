@@ -18,21 +18,7 @@ namespace Vintagestory.GameContent
         protected MeshData mesh;
         protected Cuboidf[] boxesClosed, boxesOpened;
 
-        public BlockFacing facingWhenClosed
-        {
-            get
-            {
-                int face = ((int)(RotateYRad / (GameMath.PIHALF - 0.00001F)) % 4 + 4) % 4;
-                switch (face)
-                {
-                    case 0: return BlockFacing.SOUTH;
-                    case 1: return BlockFacing.EAST;
-                    case 2: return BlockFacing.NORTH;
-                    case 3: return BlockFacing.WEST;
-                    default: return BlockFacing.SOUTH;
-                }
-            }
-        }
+        public BlockFacing facingWhenClosed { get { return BlockFacing.HorizontalFromYaw(RotateYRad); } }
         public BlockFacing facingWhenOpened { get { return invertHandles? facingWhenClosed.GetCCW() : facingWhenClosed.GetCW(); } }
 
         BEBehaviorDoor leftDoor
@@ -111,7 +97,7 @@ namespace Vintagestory.GameContent
 
             if (initalSetup)
             {
-                if (leftDoor != null && !leftDoor.invertHandles)
+                if (leftDoor != null && !leftDoor.invertHandles && leftDoor.facingWhenClosed == facingWhenClosed)
                 {
                     invertHandles = true;
                     leftDoor.rightDoor = this;
@@ -119,25 +105,33 @@ namespace Vintagestory.GameContent
                 }
 
                 BlockPos rightPos = Blockentity.Pos.AddCopy(width * (int)Math.Round(Math.Sin(RotateYRad + GameMath.PIHALF)), 0, width * (int)Math.Round(Math.Cos(RotateYRad + GameMath.PIHALF)));
-                BlockPos rightrightPos = Blockentity.Pos.AddCopy(width * 2 * (int)Math.Round(Math.Sin(RotateYRad + GameMath.PIHALF)), 0, width * 2 * (int)Math.Round(Math.Cos(RotateYRad + GameMath.PIHALF)));
                 var rightDoor = BlockBehaviorDoor.getDoorAt(Api.World, rightPos);
-                var rightrightDoor = BlockBehaviorDoor.getDoorAt(Api.World, rightrightPos);
 
-                if (leftDoor == null && rightDoor != null && !rightDoor.invertHandles && (rightrightDoor?.invertHandles != true))
+                if (leftDoor == null && rightDoor != null && !rightDoor.invertHandles && (rightDoor.rightDoor?.invertHandles != true) && rightDoor.facingWhenClosed == facingWhenClosed)
                 {
-                    if (width > 1 && Api.Side == EnumAppSide.Server)
+                    if (Api.Side == EnumAppSide.Server)
                     {
-                        Api.World.BlockAccessor.SetBlock(0, rightDoor.Blockentity.Pos);
-                        BlockPos rightDoorPos = Blockentity.Pos.AddCopy((2 * width - 1) * (int)Math.Round(Math.Sin(RotateYRad + GameMath.PIHALF)), 0, (2 * width - 1) * (int)Math.Round(Math.Cos(RotateYRad + GameMath.PIHALF)));
-                        Api.World.BlockAccessor.SetBlock(Block.Id, rightDoorPos);
-                        rightDoor = Block.GetBEBehavior<BEBehaviorDoor>(rightDoorPos);
-                        rightDoor.RotateYRad = RotateYRad;
-                        rightDoor.invertHandles = true;
-                        Block.GetBehavior<BlockBehaviorDoor>().placeMultiblockParts(Api.World, rightDoorPos);
-                        this.rightDoor = rightDoor;
-                        rightDoor.SetupRotationsAndColSelBoxes(true);
-                        rightDoor.leftDoor = this;
-                        rightDoor.Blockentity.MarkDirty(true);
+                        if (rightDoor.doorBh.width > 1)
+                        {
+                            Api.World.BlockAccessor.SetBlock(0, rightDoor.Blockentity.Pos);
+                            BlockPos rightDoorPos = Blockentity.Pos.AddCopy((rightDoor.doorBh.width + width - 1) * (int)Math.Round(Math.Sin(RotateYRad + GameMath.PIHALF)), 0, (rightDoor.doorBh.width + width - 1) * (int)Math.Round(Math.Cos(RotateYRad + GameMath.PIHALF)));
+                            Api.World.BlockAccessor.SetBlock(rightDoor.Block.Id, rightDoorPos);
+                            rightDoor = Block.GetBEBehavior<BEBehaviorDoor>(rightDoorPos);
+                            rightDoor.RotateYRad = RotateYRad;
+                            rightDoor.invertHandles = true;
+                            rightDoor.doorBh.placeMultiblockParts(Api.World, rightDoorPos);
+                            this.rightDoor = rightDoor;
+                            rightDoor.SetupRotationsAndColSelBoxes(true);
+                            rightDoor.leftDoor = this;
+                            rightDoor.Blockentity.MarkDirty(true);
+                        }
+                        else
+                        {
+                            rightDoor.invertHandles = true;
+                            this.rightDoor = rightDoor;
+                            rightDoor.leftDoor = this;
+                            rightDoor.Blockentity.MarkDirty(true);
+                        }
                     }
                 }
             }
