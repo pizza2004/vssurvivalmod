@@ -689,13 +689,21 @@ namespace Vintagestory.GameContent
                 {
                     // Since the game isn't set up to synchronize BlockEntity animations and the game logic of
                     // the fruit press relies on the animation progress we have to do something a little hacky
-                    // to get the client to properly synchronize the visual animation with the server
+                    // to get the client to properly synchronize the visual animation with the server, so first
+                    // we have to get the animation running for a moment if it hasn't been already
                     RunningAnimation anim = animUtil.animator.GetAnimationState("compress");
                     if (anim.CurrentFrame <= 0)
                     {
                         compressAnimMeta.AnimationSpeed = 0.0001f;
                         animUtil.StartAnimation(compressAnimMeta);
                     }
+
+                    // Then we have to fast forward the animation to the correct spot so the client will visually
+                    // match where the server is in the animation. We do this by setting the speed very low and
+                    // then progressing one step at a time in a while loop before resetting the speed back to
+                    // where it was before we performed this action. We also make sure we don't do this unless
+                    // the CurrentFrame is > 0 to make sure that the client is fully loaded and capable of playing
+                    // animations otherwise it will crash with a null pointer exception
                     if (anim.CurrentFrame > 0 && anim.CurrentFrame < packet.CurrentFrame)
                     {
                         compressAnimMeta.AnimationSpeed = 0.0001f;
@@ -706,6 +714,7 @@ namespace Vintagestory.GameContent
                         MarkDirty(true);
                         updateSqueezeRel(anim);
                     }
+
                     if (listenerId == 0) listenerId = RegisterGameTickListener(onTick25msClient, 25);
                 }
                 else if (packet.AnimationState == EnumFruitPressAnimState.Unscrew)
