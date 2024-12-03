@@ -696,7 +696,7 @@ namespace Vintagestory.GameContent
                         compressAnimMeta.AnimationSpeed = 0.0001f;
                         animUtil.StartAnimation(compressAnimMeta);
                     }
-                    if (anim.CurrentFrame > 0 && anim.CurrentFrame <= packet.CurrentFrame)
+                    if (anim.CurrentFrame > 0 && anim.CurrentFrame < packet.CurrentFrame)
                     {
                         if (compressAnimMeta.AnimationSpeed == 0) compressAnimMeta.AnimationSpeed = 0.0001f;
                         while (anim.CurrentFrame < packet.CurrentFrame) anim.Progress(1f, 1f);
