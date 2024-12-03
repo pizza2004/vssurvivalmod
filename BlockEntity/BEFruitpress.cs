@@ -687,13 +687,16 @@ namespace Vintagestory.GameContent
                 }
                 else if (packet.AnimationState == EnumFruitPressAnimState.ScrewContinue)
                 {
+                    // Since the game isn't set up to synchronize BlockEntity animations and the game logic of
+                    // the fruit press relies on the animation progress we have to do something a little hacky
+                    // to get the client to properly synchronize the visual animation with the server
                     RunningAnimation anim = animUtil.animator.GetAnimationState("compress");
                     if (anim.CurrentFrame <= 0)
                     {
                         compressAnimMeta.AnimationSpeed = 0.0001f;
                         animUtil.StartAnimation(compressAnimMeta);
                     }
-                    if (anim.CurrentFrame > 0 && anim.CurrentFrame <= packet.CurrentFrame - 5)
+                    if (anim.CurrentFrame > 0 && anim.CurrentFrame <= packet.CurrentFrame)
                     {
                         if (compressAnimMeta.AnimationSpeed == 0) compressAnimMeta.AnimationSpeed = 0.0001f;
                         while (anim.CurrentFrame < packet.CurrentFrame) anim.Progress(1f, 1f);
