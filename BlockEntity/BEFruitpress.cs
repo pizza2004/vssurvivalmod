@@ -27,11 +27,19 @@ namespace Vintagestory.GameContent
         Screw
     }
 
+    public enum EnumFruitPressAnimState
+    {
+        ScrewStart,
+        Unscrew,
+        ScrewContinue
+    }
+
     [ProtoContract(ImplicitFields = ImplicitFields.AllPublic)]
     public class FruitPressAnimPacket
     {
-        public bool AnimationActive;
+        public EnumFruitPressAnimState AnimationState;
         public float AnimationSpeed;
+        public float CurrentFrame = 0;
     }
 
 
@@ -91,6 +99,8 @@ namespace Vintagestory.GameContent
             EaseInSpeed = 3
         };
 
+        float? loadedFrame;
+        bool serverListenerActive;
 
         long listenerId;
         double juiceableLitresCapacity = 10;
@@ -177,6 +187,11 @@ namespace Vintagestory.GameContent
                     renderer.reloadMeshes(getJuiceableProps(mashStack), true);
                     genBucketMesh();
                 }
+                else if (serverListenerActive)
+                {
+                    animUtil.StartAnimation(compressAnimMeta);
+                    if (listenerId == 0) listenerId = RegisterGameTickListener(onTick100msServer, 25);
+                }
             }
         }
 
@@ -188,7 +203,7 @@ namespace Vintagestory.GameContent
             double squeezeRel = mashStack?.Attributes.GetDouble("squeezeRel", 1) ?? 1;
             float selfHeight = (float)(juiceableLitresTransfered + juiceableLitresLeft) / 10f;
 
-            if (MashSlot.Empty || renderer.juiceTexPos == null || squeezeRel >= 1 || pressSqueezeRel > squeezeRel) return;
+            if (MashSlot.Empty || renderer.juiceTexPos == null || squeezeRel >= 1 || pressSqueezeRel > squeezeRel || squeezedLitresLeft < 0.01) return;
 
             var rand = Api.World.Rand;
 
@@ -231,6 +246,16 @@ namespace Vintagestory.GameContent
 
         private void onTick100msServer(float dt)
         {
+            RunningAnimation anim = animUtil.animator.GetAnimationState("compress");
+            if (serverListenerActive)
+            {
+                anim.CurrentFrame = loadedFrame ?? 0;
+                updateSqueezeRel(animUtil.animator.GetAnimationState("compress"));
+                serverListenerActive = false;
+                loadedFrame = null;
+                return;
+            }
+            else if (CompressAnimActive) (Api as ICoreServerAPI)?.Network.BroadcastBlockEntityPacket(Pos, PacketIdAnimUpdate, new FruitPressAnimPacket() { AnimationState = EnumFruitPressAnimState.ScrewContinue, AnimationSpeed = compressAnimMeta.AnimationSpeed, CurrentFrame = anim.CurrentFrame });
             if (MashSlot.Empty) return;
 
             var juiceProps = getJuiceableProps(mashStack);
@@ -327,17 +352,6 @@ namespace Vintagestory.GameContent
             {
                 (Api as ICoreClientAPI).Network.SendBlockEntityPacket(Pos, PacketIdScrewStart);
 
-                if (!CompressAnimActive)
-                {
-                    compressAnimMeta.AnimationSpeed = 0.5f;
-                    animUtil.StartAnimation(compressAnimMeta);
-                }
-
-                if (listenerId == 0)
-                {
-                    listenerId = RegisterGameTickListener(onTick25msClient, 25);
-                }
-
                 return true;
             }
 
@@ -346,12 +360,6 @@ namespace Vintagestory.GameContent
             {
                 (Api as ICoreClientAPI).Network.SendBlockEntityPacket(Pos, PacketIdUnscrew);
 
-                if (CompressAnimActive)
-                {
-                    compressAnimMeta.AnimationSpeed = 1.5f;
-                    animUtil.StopAnimation("compress");
-                }
-
                 return true;
             }
 
@@ -359,8 +367,6 @@ namespace Vintagestory.GameContent
             if (compressAnimMeta.AnimationSpeed == 0 && byPlayer.Entity.Controls.CtrlKey)
             {
                 (Api as ICoreClientAPI).Network.SendBlockEntityPacket(Pos, PacketIdScrewContinue);
-
-                if (compressAnimMeta.AnimationSpeed != 0.5f) compressAnimMeta.AnimationSpeed = 0.5f;
 
                 return true;
             }
@@ -449,7 +455,7 @@ namespace Vintagestory.GameContent
                         mashStack.Collectible.SetTransitionState(mashStack, sourceState.Props.Type, sourceState.TransitionedHours * t + targetState.TransitionedHours * (1 - t));
                     }
 
-                    removeItems =  1;
+                    removeItems = 1;
                 } else
                 {
                     // In order to make sure we're always giving exactly the amount of juice that's appropriate for the
@@ -588,9 +594,8 @@ namespace Vintagestory.GameContent
             if (!CompressAnimActive) return;
 
             compressAnimMeta.AnimationSpeed = 0f;
-            (Api as ICoreServerAPI)?.Network.BroadcastBlockEntityPacket(Pos, PacketIdAnimUpdate, new FruitPressAnimPacket() { AnimationActive = true, AnimationSpeed = 0f });
+            (Api as ICoreServerAPI)?.Network.BroadcastBlockEntityPacket(Pos, PacketIdAnimUpdate, new FruitPressAnimPacket() { AnimationState = EnumFruitPressAnimState.ScrewContinue, AnimationSpeed = 0f });
         }
-
 
         // Here we will calculate various things, like how squeezed down the mash is, how far down the screw is,
         // and a copy of squeezeRel for the press itself so that it can tell if the screw is touching the mash yet
@@ -631,7 +636,7 @@ namespace Vintagestory.GameContent
             if (CompressAnimActive)
             {
                 compressAnimMeta.AnimationSpeed = 0f;
-                (Api as ICoreServerAPI)?.Network.BroadcastBlockEntityPacket(Pos, PacketIdAnimUpdate, new FruitPressAnimPacket() { AnimationActive = true, AnimationSpeed = 0f });
+                (Api as ICoreServerAPI)?.Network.BroadcastBlockEntityPacket(Pos, PacketIdAnimUpdate, new FruitPressAnimPacket() { AnimationState = EnumFruitPressAnimState.ScrewContinue, AnimationSpeed = 0f });
             }
 
             return true;
@@ -648,16 +653,16 @@ namespace Vintagestory.GameContent
                     squeezeSoundPlayed = false;
                     lastLiquidTransferTotalHours = Api.World.Calendar.TotalHours;
                     if (listenerId == 0) listenerId = RegisterGameTickListener(onTick100msServer, 25);
-                    (Api as ICoreServerAPI)?.Network.BroadcastBlockEntityPacket(Pos, PacketIdAnimUpdate, new FruitPressAnimPacket() { AnimationActive = true, AnimationSpeed = 0.5f });
+                    (Api as ICoreServerAPI)?.Network.BroadcastBlockEntityPacket(Pos, PacketIdAnimUpdate, new FruitPressAnimPacket() { AnimationState = EnumFruitPressAnimState.ScrewStart, AnimationSpeed = 0.5f });
                     break;
                 case PacketIdScrewContinue:
                     compressAnimMeta.AnimationSpeed = 0.5f;
-                    (Api as ICoreServerAPI)?.Network.BroadcastBlockEntityPacket(Pos, PacketIdAnimUpdate, new FruitPressAnimPacket() { AnimationActive = true, AnimationSpeed = 0.5f });
+                    (Api as ICoreServerAPI)?.Network.BroadcastBlockEntityPacket(Pos, PacketIdAnimUpdate, new FruitPressAnimPacket() { AnimationState = EnumFruitPressAnimState.ScrewContinue, AnimationSpeed = 0.5f });
                     break;
                 case PacketIdUnscrew:
                     compressAnimMeta.AnimationSpeed = 1.5f;
                     animUtil.StopAnimation("compress");
-                    (Api as ICoreServerAPI)?.Network.BroadcastBlockEntityPacket(Pos, PacketIdAnimUpdate, new FruitPressAnimPacket() { AnimationActive = false, AnimationSpeed = 1.5f });
+                    (Api as ICoreServerAPI)?.Network.BroadcastBlockEntityPacket(Pos, PacketIdAnimUpdate, new FruitPressAnimPacket() { AnimationState = EnumFruitPressAnimState.Unscrew, AnimationSpeed = 1.5f });
                     animUtil.animator.GetAnimationState("compress").Stop(); // Without this the player is occasionally told to unscrew a second time
                     break;
             }
@@ -673,13 +678,34 @@ namespace Vintagestory.GameContent
 
                 compressAnimMeta.AnimationSpeed = packet.AnimationSpeed;
 
-                if (packet.AnimationActive)
+                if (packet.AnimationState == EnumFruitPressAnimState.ScrewStart)
                 {
-                    if (!CompressAnimActive) squeezeSoundPlayed = false;
                     animUtil.StartAnimation(compressAnimMeta);
+                    squeezeSoundPlayed = false;
+                    lastLiquidTransferTotalHours = Api.World.Calendar.TotalHours;
                     if (listenerId == 0) listenerId = RegisterGameTickListener(onTick25msClient, 25);
                 }
-                else
+                else if (packet.AnimationState == EnumFruitPressAnimState.ScrewContinue)
+                {
+                    RunningAnimation anim = animUtil.animator.GetAnimationState("compress");
+                    if (anim.CurrentFrame <= 0)
+                    {
+                        compressAnimMeta.AnimationSpeed = 0.0001f;
+                        animUtil.StartAnimation(compressAnimMeta);
+                    }
+                    if (anim.CurrentFrame > 0 && anim.CurrentFrame <= packet.CurrentFrame - 5)
+                    {
+                        if (compressAnimMeta.AnimationSpeed == 0) compressAnimMeta.AnimationSpeed = 0.0001f;
+                        while (anim.CurrentFrame < packet.CurrentFrame) anim.Progress(1f, 1f);
+                        compressAnimMeta.AnimationSpeed = packet.AnimationSpeed;
+                        anim.CurrentFrame = packet.CurrentFrame;
+
+                        MarkDirty(true);
+                        updateSqueezeRel(anim);
+                    }
+                    if (listenerId == 0) listenerId = RegisterGameTickListener(onTick25msClient, 25);
+                }
+                else if (packet.AnimationState == EnumFruitPressAnimState.Unscrew)
                 {
                     animUtil.StopAnimation("compress");
                     if (listenerId != 0) { UnregisterGameTickListener(listenerId); listenerId = 0; }
@@ -728,10 +754,11 @@ namespace Vintagestory.GameContent
             ItemStack beforeStack = mashStack;
 
             base.FromTreeAttributes(tree, worldForResolving);
-            squeezedLitresLeft = tree.GetFloat("squeezedLitresLeft");
+            squeezedLitresLeft = tree.GetDouble("squeezedLitresLeft");
             squeezeSoundPlayed = tree.GetBool("squeezeSoundPlayed");
             squeezedJuiceLeft = tree.GetBool("squeezedJuiceLeft");
             dryStackSize = tree.GetInt("dryStackSize");
+            lastLiquidTransferTotalHours = tree.GetDouble("lastLiquidTransferTotalHours");
 
             if (worldForResolving.Side == EnumAppSide.Client)
             {
@@ -743,6 +770,15 @@ namespace Vintagestory.GameContent
                 renderer?.reloadMeshes(getJuiceableProps(mashStack), wasEmpty != Inventory.Empty || (beforeStack != null && mashStack != null && !beforeStack.Equals(Api.World, mashStack, GlobalConstants.IgnoredStackAttributes)));
                 genBucketMesh();
             }
+            else
+            {
+                if (listenerId == 0) serverListenerActive = tree.GetBool("ServerListenerActive");
+                if (listenerId != 0 || serverListenerActive)
+                {
+                    loadedFrame = tree.GetFloat("CurrentFrame");
+                    compressAnimMeta.AnimationSpeed = tree.GetFloat("AnimationSpeed", compressAnimMeta.AnimationSpeed);
+                }
+            }
         }
 
         public override void ToTreeAttributes(ITreeAttribute tree)
@@ -752,6 +788,17 @@ namespace Vintagestory.GameContent
             tree.SetBool("squeezeSoundPlayed", squeezeSoundPlayed);
             tree.SetBool("squeezedJuiceLeft", squeezedJuiceLeft);
             tree.SetInt("dryStackSize", dryStackSize);
+            tree.SetDouble("lastLiquidTransferTotalHours", lastLiquidTransferTotalHours);
+
+            if (Api.Side == EnumAppSide.Server)
+            {
+                if (listenerId != 0) tree.SetBool("ServerListenerActive", true);
+                if (CompressAnimActive)
+                {
+                    tree.SetFloat("CurrentFrame", animUtil.animator.GetAnimationState("compress").CurrentFrame);
+                    tree.SetFloat("AnimationSpeed", compressAnimMeta.AnimationSpeed);
+                }
+            }
         }
 
         public override bool OnTesselation(ITerrainMeshPool mesher, ITesselatorAPI tessThreadTesselator)
